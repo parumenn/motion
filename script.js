@@ -82,23 +82,20 @@ async function initApp() {
         
         // --- ★ 追加: アカウントの承認ステータスチェック ---
         try {
-            // 'users' コレクションから自身のステータスを取得
+        currentUser = await account.get();
+        
+        // --- ★ 承認ステータスチェックの修正 ---
+        try {
             const userDoc = await databases.getDocument(DB_ID, 'users', currentUser.$id);
+            
             if (userDoc.status !== 'approved') {
-                alert('アカウントは現在管理者の承認待ちです。承認されるまでアクセスできません。');
+                // 承認待ちの場合、ログイン済みセッションを削除してからメッセージを出す
                 await account.deleteSession('current');
                 currentUser = null;
+                alert('アカウントは現在管理者の承認待ちです。承認されるまでアクセスできません。');
                 showAuthModal();
                 return;
             }
-        } catch (err) {
-            // ドキュメントが無い、または未完了の場合
-            alert('アカウントの承認情報が取得できません。承認待ちか、登録が未完了です。');
-            await account.deleteSession('current');
-            currentUser = null;
-            showAuthModal();
-            return;
-        }
         // ---------------------------------------------------
 
         document.getElementById('user-info-text').textContent = `ログイン中: ${currentUser.name} (${currentUser.email})`;

@@ -204,17 +204,13 @@ function showAuthModal() {
     const authOverlay = document.getElementById('login-overlay');
     if (!authOverlay) return;
 
-    // 架空のユーザー名ではなく、実際のメールアドレス入力として扱う
     const usernameInput = document.getElementById('auth-username');
-    usernameInput.placeholder = "メールアドレス"; 
-    usernameInput.type = "email";
-    
     const passwordInput = document.getElementById('auth-password');
     const authSubmit = document.getElementById('auth-submit-btn');
     const authToggle = document.getElementById('auth-toggle-btn');
     const authForm = document.getElementById('auth-form');
 
-    // ★ 6桁コード(OTP)入力用UIの動的追加
+    // 6桁コード(OTP)入力用UIの動的追加
     let otpContainer = document.getElementById('otp-container');
     if (!otpContainer) {
         otpContainer = document.createElement('div');
@@ -229,7 +225,6 @@ function showAuthModal() {
         authForm.appendChild(otpContainer);
     }
 
-    // 既存の入力欄を切り替えやすくするためにラップする
     let inputsWrapper = document.getElementById('auth-inputs-wrapper');
     if (!inputsWrapper) {
         inputsWrapper = document.createElement('div');
@@ -256,14 +251,11 @@ function showAuthModal() {
         passwordInput.setAttribute('autocomplete', isSignUp ? 'new-password' : 'current-password');
     };
 
-
     // ログインまたはコード送信ボタン
-
     authSubmit.onclick = async () => {
         const email = usernameInput.value.trim();
         const pass = passwordInput.value.trim();
 
-        // ★ メールアドレスの簡単な形式チェックを追加
         if (!email || !pass) return alert('メールアドレスとパスワードを入力してください');
         if (!email.includes('@') || !email.includes('.')) {
             return alert('有効なメールアドレスを入力してください');
@@ -271,14 +263,13 @@ function showAuthModal() {
 
         try {
             if (isSignUp) {
-                // まずAppwriteにユーザーを仮登録する
+                // Appwriteにユーザーを仮登録
                 const newUser = await account.create(ID.unique(), email, pass);
                 
-                // 登録したユーザーIDに対してEmail OTP（6桁コード）を発行・送信する
-                const token = await account.createEmailToken(newUser.$id, email);
+                // Email OTP（6桁コード）を発行・送信
+                await account.createEmailToken(newUser.$id, email);
                 tempAuthData = { userId: newUser.$id, email };
                 
-                // UIをコード入力画面に切り替え
                 inputsWrapper.classList.add('hidden');
                 otpContainer.classList.remove('hidden');
                 document.getElementById('auth-title').textContent = 'メール認証';
@@ -296,25 +287,20 @@ function showAuthModal() {
         }
     };
 
-    // ★ 6桁コードの検証・申請完了処理
+    // 6桁コードの検証・申請完了処理
     document.getElementById('auth-otp-submit').onclick = async () => {
         const secret = document.getElementById('auth-otp').value.trim();
         if(!secret) return alert('認証コードを入力してください');
         
         try {
-            // ★修正3: OTP（6桁コード）でセッションを作成してメール認証を完了させる
             await account.createSession(tempAuthData.userId, secret);
             
-            // データベースに「承認待ち」として登録
             await databases.createDocument(DB_ID, 'users', tempAuthData.userId, { 
                 email: tempAuthData.email, 
                 status: 'pending' 
             });
             
-            // 管理者へメール通知
             await sendAdminRequestEmail(tempAuthData.email);
-
-            // 承認待ち状態にするため、一旦ログアウトさせる
             await account.deleteSession('current');
             
             alert('管理者にアカウント開設のリクエストを送りました。承認されるまでお待ちください。');
@@ -331,7 +317,6 @@ function showAuthModal() {
         tempAuthData = null;
     };
 }
-
 document.getElementById('btn-change-pass')?.addEventListener('click', async () => {
     const oldPass = document.getElementById('change-pass-old').value;
     const newPass = document.getElementById('change-pass-new').value;

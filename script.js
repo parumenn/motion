@@ -756,6 +756,11 @@ function renderBlocks(blockArray, container) {
 // 非テキスト（画像やページリンク）ブロックでのキーボード操作ハンドラ（上下移動の確実化）
 function handleNonTextKeydown(e) {
     const wrapper = e.target.closest('.block-wrapper');
+    if (!wrapper) return;
+    
+    // ★ 追加: contentEl を宣言しておく
+    const contentEl = wrapper.querySelector('.block-content');
+
     if (e.key === 'Backspace' || e.key === 'Delete') { 
         e.preventDefault(); 
         const prev = wrapper.previousElementSibling; 
@@ -785,7 +790,6 @@ function handleNonTextKeydown(e) {
                 if (pc.contentEditable === "true") setCaretPosition(pc, pc.textContent.length); 
             }
         } else {
-            // 最上部ならタイトルへ戻る
             pageTitleEl.focus();
         }
     } else if (e.key === 'ArrowDown' || e.key === 'ArrowRight' || e.key === 'Enter') {
@@ -810,16 +814,6 @@ function handleNonTextKeydown(e) {
                 nc.focus(); 
                 if (nc.contentEditable === "true") setCaretPosition(nc, 0); 
             }
-        } else if (e.key === 'Enter') {
-            // 画像などの下でEnterを押したら新しい段落を作る
-            const newBlockWrapper = document.createElement('div');
-            const newId = generateId();
-            renderBlocks([{ id: newId, type: 'p', content: '', children: [] }], newBlockWrapper);
-            wrapper.after(newBlockWrapper.firstElementChild);
-            const nc = wrapper.nextElementSibling.querySelector('.block-content');
-            if (nc) nc.focus();
-            saveEditorState(true);
-            reinitSortables();
         }
     }
 }
@@ -833,10 +827,15 @@ function reinitSortables() {
 function extractBlocks(container) {
     if(!container) return [];
     return Array.from(container.children).filter(el => el.classList.contains('block-wrapper')).map(wrapper => {
-        const type = wrapper.dataset.type, contentEl = wrapper.querySelector(':scope > .block-main > .block-content');
+        const type = wrapper.dataset.type;
+        const contentEl = wrapper.querySelector(':scope > .block-main > .block-content');
+        
+        // ★ 追加: fileId を DOM から取得する
+        const fileId = contentEl?.dataset.fileId || null;
+
         let content = '';
-        if (type === 'page_link') content = contentEl.dataset.linkId;
-        else if (type === 'image') content = contentEl.querySelector('img').src;
+        if (type === 'page_link') content = contentEl?.dataset.linkId || '';
+        else if (type === 'image') content = contentEl?.querySelector('img')?.src || '';
         else if (contentEl) {
             content = DOMPurify.sanitize(contentEl.innerHTML, { ALLOWED_TAGS: ['a','br','b','strong','i','em','u','s','strike','span'], ALLOWED_ATTR: ['href','target','rel','style','class'] });
         }
@@ -844,7 +843,7 @@ function extractBlocks(container) {
             id: wrapper.dataset.id, 
             type, 
             content, 
-            fileId,
+            fileId, // これで安全に参照できます
             checked: wrapper.classList.contains('checked'), 
             toggleOpen: wrapper.classList.contains('open'), 
             children: extractBlocks(wrapper.querySelector(':scope > .block-children')) 

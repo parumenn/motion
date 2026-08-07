@@ -258,19 +258,23 @@ function showAuthModal() {
 
 
     // ログインまたはコード送信ボタン
+
     authSubmit.onclick = async () => {
         const email = usernameInput.value.trim();
         const pass = passwordInput.value.trim();
 
+        // ★ メールアドレスの簡単な形式チェックを追加
         if (!email || !pass) return alert('メールアドレスとパスワードを入力してください');
+        if (!email.includes('@') || !email.includes('.')) {
+            return alert('有効なメールアドレスを入力してください');
+        }
 
         try {
             if (isSignUp) {
-                // ★修正1: まずAppwriteにユーザーを仮登録する
-                // ※パスワードの文字数制限（デフォルト8文字以上など）に注意してください
+                // まずAppwriteにユーザーを仮登録する
                 const newUser = await account.create(ID.unique(), email, pass);
                 
-                // ★修正2: 登録したユーザーIDに対してEmail OTP（6桁コード）を発行・送信する
+                // 登録したユーザーIDに対してEmail OTP（6桁コード）を発行・送信する
                 const token = await account.createEmailToken(newUser.$id, email);
                 tempAuthData = { userId: newUser.$id, email };
                 

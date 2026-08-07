@@ -465,9 +465,9 @@ async function createPageInAppwrite(page) {
         isLocked: page.isLocked || false
     };
 
-    // 💡 修正：read権限も「作成したユーザー本人」だけに制限する
+    // ログイン中のユーザーID（currentUser.$id）に対してのみ、読み・書き・削除を許可する
     const permissions = [
-        Permission.read(Role.user(currentUser.$id)),   // ← Role.any() から変更
+        Permission.read(Role.user(currentUser.$id)),
         Permission.update(Role.user(currentUser.$id)),
         Permission.delete(Role.user(currentUser.$id))
     ];

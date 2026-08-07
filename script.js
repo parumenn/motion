@@ -13,23 +13,23 @@ const COMMANDS = [
 
 let state = { pages: {}, rootPages: [], currentPageId: null, expandedNodes: [], recentPages: [] };
 let sortableInstances = [];
+let pendingImageTargetBlock = null;
 
-let pendingImageTargetBlock = null; // 画像アップロード対象ブロックの保持用
+let currentMediaBytes = 0;
+const MAX_MEDIA_BYTES = 500 * 1024 * 1024; // 500MB 上限
 
 // Appwrite Storageから画像を削除する処理
 async function deleteImageFromStorage(fileUrl, fileId) {
     let idToDelete = fileId;
-    
-    // fileId が無い場合は URL から抽出 (/files/ファイルID/view などの形式)
     if (!idToDelete && fileUrl) {
         const match = fileUrl.match(/\/files\/([^\/?#]+)/);
         if (match) idToDelete = match[1];
     }
-    
     if (idToDelete) {
         try {
             await storage.deleteFile(BUCKET_ID, idToDelete);
             console.log('Storageからファイルを削除しました:', idToDelete);
+            calcStorageUsage(); // 容量計算を更新
         } catch (e) {
             console.error('Storage削除エラー:', e);
         }
@@ -59,18 +59,43 @@ const BUCKET_ID = 'motion_storage';
 
 let currentUser = null;
 
+// 設定をクラウドへ保存するヘルパー関数
+async function savePrefs(key, value) {
+    if (!currentUser) return;
+    try {
+        const prefs = await account.getPrefs();
+        prefs[key] = value;
+        await account.updatePrefs(prefs);
+    } catch(e) { console.error('Prefs update error:', e); }
+}
+
 // ================= 認証・初期化処理 =================
 async function initApp() {
-    applyTheme();
-    
-    const savedQuality = localStorage.getItem('motion_image_quality') || 'original';
-    const qualitySelect = document.getElementById('setting-image-quality');
-    if (qualitySelect) qualitySelect.value = savedQuality;
+    applyTheme(); // 初期適用(未ログイン状態)
 
     try {
         currentUser = await account.get();
         document.getElementById('user-info-text').textContent = `ログイン中: ${currentUser.name} (${currentUser.email})`;
         
+        // --- 設定をクラウドから復元 ---
+        try {
+            const prefs = await account.getPrefs();
+            let themeChanged = false;
+            if (prefs.theme) { localStorage.setItem('local_workspace_theme', prefs.theme); themeChanged = true; }
+            if (prefs.image_quality) localStorage.setItem('motion_image_quality', prefs.image_quality);
+            if (prefs.show_locked !== undefined) localStorage.setItem('motion_show_locked_in_home', prefs.show_locked);
+            if (themeChanged) applyTheme();
+        } catch (e) { console.error("Prefs load error:", e); }
+        // ------------------------------
+
+        // 設定画面のUI要素に現在の設定値を反映
+        const savedQuality = localStorage.getItem('motion_image_quality') || 'original';
+        const qualitySelect = document.getElementById('setting-image-quality');
+        if (qualitySelect) qualitySelect.value = savedQuality;
+
+        const showLockedCheck = document.getElementById('setting-show-locked');
+        if (showLockedCheck) showLockedCheck.checked = (localStorage.getItem('motion_show_locked_in_home') === 'true');
+
         const savedUi = localStorage.getItem('motion_ui_state');
         if (savedUi) {
             const parsedUi = JSON.parse(savedUi);
@@ -80,7 +105,6 @@ async function initApp() {
 
         await loadDataFromAppwrite();
 
-        // ロック中のページおよびその配下ページを展開リストからクリーンアップ（デフォルトクローズ）
         state.expandedNodes = state.expandedNodes.filter(id => {
             const lockedBy = isPageLocked(id);
             return !lockedBy || lockedBy.isUnlockedSession;
@@ -93,8 +117,26 @@ async function initApp() {
         showAuthModal();
     }
 }
+
+// イベントリスナー: 設定が変更されたらローカルストレージとクラウド両方に保存
 document.getElementById('setting-image-quality')?.addEventListener('change', (e) => {
-    localStorage.setItem('motion_image_quality', e.target.value);
+    const val = e.target.value;
+    localStorage.setItem('motion_image_quality', val);
+    savePrefs('image_quality', val);
+});
+
+document.getElementById('setting-show-locked')?.addEventListener('change', (e) => {
+    const val = e.target.checked;
+    localStorage.setItem('motion_show_locked_in_home', val);
+    savePrefs('show_locked', val);
+    if(state.currentPageId === 'home') renderHome();
+});
+
+document.querySelectorAll('input[name="theme"]').forEach(r => r.onchange = (e) => { 
+    const val = r.value;
+    localStorage.setItem('local_workspace_theme', val); 
+    applyTheme(); 
+    savePrefs('theme', val);
 });
 
 document.querySelector('.settings-tab[data-tab="account"]')?.addEventListener('click', () => {
@@ -110,9 +152,10 @@ function formatBytes(bytes) {
 
 async function calcStorageUsage() {
     const usageText = document.getElementById('storage-usage-text');
+    const limitText = document.getElementById('storage-limit-text');
+    const barFill = document.getElementById('storage-bar-fill');
     if (!usageText) return;
 
-    // 1. テキストデータ（ページ・ブロック）使用量の計算
     let textBytes = 0;
     Object.values(state.pages).forEach(page => {
         const blocksData = page.blocks || [];
@@ -120,22 +163,29 @@ async function calcStorageUsage() {
         textBytes += new Blob([pageString]).size;
     });
 
-    // テキスト使用量を即座に反映（添付ファイルは計算中を表示）
-    usageText.innerHTML = `テキストデータ使用量: ${formatBytes(textBytes)}<br>添付ファイル使用量: 計算中...`;
+    usageText.innerHTML = `テキストデータ: ${formatBytes(textBytes)}<br>添付ファイル: 計算中...`;
 
-    // 2. 添付ファイル（Appwrite Storage）使用量の計算
-    let mediaBytes = 0;
     try {
         if (currentUser) {
             const fileList = await storage.listFiles(BUCKET_ID);
-            mediaBytes = fileList.files.reduce((sum, file) => sum + (file.sizeOriginal || 0), 0);
+            currentMediaBytes = fileList.files.reduce((sum, file) => sum + (file.sizeOriginal || 0), 0);
         }
     } catch (err) {
         console.error("ストレージ使用量取得エラー:", err);
     }
 
-    // 両方の使用量を表示
-    usageText.innerHTML = `テキストデータ使用量: ${formatBytes(textBytes)}<br>添付ファイル使用量: ${formatBytes(mediaBytes)}`;
+    usageText.innerHTML = `テキストデータ: ${formatBytes(textBytes)}<br>添付ファイル: ${formatBytes(currentMediaBytes)}`;
+    
+    // プログレスバーの更新処理
+    if (limitText && barFill) {
+        const percent = Math.min((currentMediaBytes / MAX_MEDIA_BYTES) * 100, 100);
+        barFill.style.width = `${percent}%`;
+        barFill.classList.remove('warning', 'danger');
+        if (percent >= 90) barFill.classList.add('danger');
+        else if (percent >= 70) barFill.classList.add('warning');
+        
+        limitText.textContent = `${formatBytes(currentMediaBytes)} / 500.00 MB (${percent.toFixed(1)}%)`;
+    }
 }
 
 const usernameToEmail = (username) => `${username.toLowerCase()}@motion.local`;
@@ -144,33 +194,25 @@ function showAuthModal() {
     const authOverlay = document.getElementById('login-overlay');
     if (!authOverlay) return;
 
-    // 入力要素を取得
     const usernameInput = document.getElementById('auth-username');
     const passwordInput = document.getElementById('auth-password');
     const authSubmit = document.getElementById('auth-submit-btn');
     const authToggle = document.getElementById('auth-toggle-btn');
 
-    // ★ モーダル表示時にフォームを初期化（空にする）
     usernameInput.value = '';
     passwordInput.value = '';
 
     authOverlay.classList.remove('hidden');
     let isSignUp = false;
 
-    // アカウント作成 / ログインの切り替え処理
     authToggle.onclick = () => {
         isSignUp = !isSignUp;
-        
-        // 表示テキストの切り替え
         document.getElementById('auth-title').textContent = isSignUp ? 'アカウント作成' : 'ログイン';
         authSubmit.textContent = isSignUp ? '作成してログイン' : 'ログイン';
         authToggle.textContent = isSignUp ? 'ログインへ切替' : 'アカウント作成へ切替';
 
-        // ★ 切替時にも入力をリセット
         usernameInput.value = '';
         passwordInput.value = '';
-
-        // ★ ブラウザ補完用属性の切り替え（ログイン: current-password / 新規登録: new-password）
         passwordInput.setAttribute('autocomplete', isSignUp ? 'new-password' : 'current-password');
     };
 
@@ -187,7 +229,6 @@ function showAuthModal() {
             }
             await account.createEmailSession(email, pass);
             
-            // 成功時にモーダルを閉じてフォームクリア
             usernameInput.value = '';
             passwordInput.value = '';
             authOverlay.classList.add('hidden');
@@ -425,7 +466,6 @@ function renderTree() {
             item.className = `tree-item ${state.currentPageId === id ? 'active' : ''}`;
             item.style.paddingLeft = `${16 + level * 16}px`;
             
-            // パスワード保護されているか判定（未解除の場合は展開を許可しない）
             const lockedBy = isPageLocked(id);
             const isUnlocked = !lockedBy || lockedBy.isUnlockedSession;
             const isExpanded = isUnlocked && state.expandedNodes.includes(id);
@@ -651,7 +691,6 @@ pageTitleEl.addEventListener('input', (e) => {
     }, 200);
 });
 
-// タイトル行でEnterを押したら本文（最初のブロック）にフォーカスする処理
 pageTitleEl.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { 
         e.preventDefault(); 
@@ -690,7 +729,6 @@ function showPasswordModal(lockParentId, onSuccess) {
         parentPage.password = pass; 
         parentPage.isUnlockedSession = true;
         
-        // 保存ポップアップの判定を防ぐため値をクリアしてから閉じる
         modalPass.value = '';
         overlay.classList.add('hidden'); 
         if(onSuccess) onSuccess();
@@ -770,15 +808,13 @@ function renderBlocks(blockArray, container) {
             if(target) content.onclick = () => openPage(blockData.content);
             content.addEventListener('keydown', handleNonTextKeydown);
         } else if (blockData.type === 'image') {
-    content.contentEditable = "false"; 
-    content.tabIndex = 0;
-    if (blockData.fileId) content.dataset.fileId = blockData.fileId;
-    content.innerHTML = `<img src="${blockData.content}" alt="画像">`;
-    
-    // クリック時に確実にフォーカスを当てる
-    content.onclick = () => content.focus();
-    content.addEventListener('keydown', handleNonTextKeydown);
-} else {
+            content.contentEditable = "false"; 
+            content.tabIndex = 0;
+            if (blockData.fileId) content.dataset.fileId = blockData.fileId;
+            content.innerHTML = `<img src="${blockData.content}" alt="画像">`;
+            content.onclick = () => content.focus();
+            content.addEventListener('keydown', handleNonTextKeydown);
+        } else {
             content.contentEditable = "true"; 
             content.innerHTML = blockData.content || '';
             content.addEventListener('keydown', handleBlockKeydown); 
@@ -798,24 +834,19 @@ function renderBlocks(blockArray, container) {
     });
 }
 
-// 非テキスト（画像やページリンク）ブロックでのキーボード操作ハンドラ（上下移動の確実化）
-// 非テキスト（画像やページリンク）ブロックでのキーボード操作ハンドラ（上下移動の確実化）
 function handleNonTextKeydown(e) {
     const wrapper = e.target.closest('.block-wrapper');
     if (!wrapper) return;
-
     const contentEl = wrapper.querySelector('.block-content');
 
     if (e.key === 'Backspace' || e.key === 'Delete') { 
         e.preventDefault(); 
         const prev = wrapper.previousElementSibling; 
 
-        // 画像ブロックの場合はStorageからファイル削除を実行
         if (wrapper.dataset.type === 'image') {
             const imgEl = wrapper.querySelector('img');
             const fileId = contentEl?.dataset.fileId;
             const imgUrl = imgEl ? imgEl.src : null;
-            
             if (imgUrl || fileId) {
                 deleteImageFromStorage(imgUrl, fileId);
             }
@@ -879,8 +910,6 @@ function extractBlocks(container) {
     return Array.from(container.children).filter(el => el.classList.contains('block-wrapper')).map(wrapper => {
         const type = wrapper.dataset.type;
         const contentEl = wrapper.querySelector(':scope > .block-main > .block-content');
-        
-        // ★ 追加: fileId を DOM から取得する
         const fileId = contentEl?.dataset.fileId || null;
 
         let content = '';
@@ -893,7 +922,7 @@ function extractBlocks(container) {
             id: wrapper.dataset.id, 
             type, 
             content, 
-            fileId, // これで安全に参照できます
+            fileId, 
             checked: wrapper.classList.contains('checked'), 
             toggleOpen: wrapper.classList.contains('open'), 
             children: extractBlocks(wrapper.querySelector(':scope > .block-children')) 
@@ -989,13 +1018,10 @@ function handleBlockKeydown(e) {
         
         const isEmpty = contentEl.textContent.trim() === '';
 
-        // ① Todo・Toggle・見出しなどの特殊ブロックで、空のまま Enter を押した場合
-        //   -> ブロックタイプを通常の段落 'p' に戻す（2回目のEnterで特殊ブロックを脱出）
         if (isEmpty && wrapper.dataset.type !== 'p') {
             wrapper.dataset.type = 'p';
             const mainEl = wrapper.querySelector(':scope > .block-main');
             
-            // チェックボックスやトグルアイコン等の装飾パーツを削除
             mainEl?.querySelector('.todo-checkbox')?.remove();
             mainEl?.querySelector('.toggle-icon')?.remove();
             wrapper.classList.remove('checked', 'open');
@@ -1004,8 +1030,6 @@ function handleBlockKeydown(e) {
             return;
         }
 
-        // ② トグルの内側などの子要素（階層下）にいる空の 'p' ブロックで Enter を押した場合
-        //   -> 親トグルの外側（1階層上）に抜け出す
         if (isEmpty) {
             const parentChildren = wrapper.parentElement;
             if (parentChildren && parentChildren.classList.contains('block-children')) {
@@ -1020,7 +1044,6 @@ function handleBlockKeydown(e) {
             }
         }
 
-        // --- 通常の改行・新規ブロック作成処理 ---
         const range = window.getSelection().getRangeAt(0);
         const preRange = document.createRange(); preRange.selectNodeContents(contentEl); preRange.setEnd(range.startContainer, range.startOffset);
         const postRange = document.createRange(); postRange.selectNodeContents(contentEl); postRange.setStart(range.endContainer, range.endOffset);
@@ -1211,9 +1234,9 @@ function executeCommand(cmdId) {
     closeSlashMenu();
 
     if (cmdId === 'image') {
-    pendingImageTargetBlock = targetBlock; // ブロックを保持
-    document.getElementById('image-upload-input').click();
-} else if (cmdId === 'link') {
+        pendingImageTargetBlock = targetBlock;
+        document.getElementById('image-upload-input').click();
+    } else if (cmdId === 'link') {
         pendingExtLinkBlock = targetBlock; 
         document.getElementById('ext-link-title').value = ''; document.getElementById('ext-link-url').value = '';
         document.getElementById('ext-link-overlay').classList.remove('hidden');
@@ -1310,6 +1333,12 @@ document.getElementById('image-upload-input').addEventListener('change', async f
 });
 
 async function uploadAndInsertImage(file, targetBlock) {
+    // 【要件3】添付ファイルの上限チェック (500MB)
+    if (currentMediaBytes + file.size > MAX_MEDIA_BYTES) {
+        alert("添付ファイルの上限 (500MB) を超過します。不要な画像を削除してください。");
+        return;
+    }
+
     const qualityMode = localStorage.getItem('motion_image_quality') || 'original';
     let fileToUpload = file;
 
@@ -1346,6 +1375,7 @@ async function uploadAndInsertImage(file, targetBlock) {
         targetBlock.replaceWith(temp.firstElementChild);
         saveEditorState(true); 
         reinitSortables();
+        calcStorageUsage(); // 容量計算を更新
     } catch (err) {
         alert("画像のアップロードに失敗しました: " + err.message);
         console.error(err);
@@ -1444,11 +1474,6 @@ function openSearchModal() {
 document.getElementById('settings-btn').addEventListener('click', () => document.getElementById('settings-overlay').classList.remove('hidden'));
 document.getElementById('settings-close').addEventListener('click', () => document.getElementById('settings-overlay').classList.add('hidden'));
 
-document.getElementById('setting-show-locked')?.addEventListener('change', (e) => {
-    localStorage.setItem('motion_show_locked_in_home', e.target.checked);
-    if(state.currentPageId === 'home') renderHome();
-});
-
 document.querySelectorAll('.settings-tab').forEach(tab => {
     tab.onclick = () => {
         document.querySelectorAll('.settings-tab').forEach(t => t.classList.remove('active'));
@@ -1456,7 +1481,6 @@ document.querySelectorAll('.settings-tab').forEach(tab => {
         tab.classList.add('active'); document.getElementById('tab-' + tab.dataset.tab).classList.remove('hidden');
     };
 });
-document.querySelectorAll('input[name="theme"]').forEach(r => r.onchange = (e) => { localStorage.setItem('local_workspace_theme', r.value); applyTheme(); });
 
 document.getElementById('btn-export')?.addEventListener('click', () => {
     const exportData = clone(state);

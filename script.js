@@ -252,6 +252,7 @@ function showAuthModal() {
     };
 
     // ログインまたはコード送信ボタン
+    // アカウント作成またはログインボタン
     authSubmit.onclick = async () => {
         const email = usernameInput.value.trim();
         const pass = passwordInput.value.trim();
@@ -263,17 +264,23 @@ function showAuthModal() {
 
         try {
             if (isSignUp) {
-                // Appwriteにユーザーを仮登録
+                // 1. Appwriteにアカウントを作成
                 const newUser = await account.create(ID.unique(), email, pass);
                 
-                // Email OTP（6桁コード）を発行・送信
-                await account.createEmailToken(newUser.$id, email);
-                tempAuthData = { userId: newUser.$id, email };
+                // 2. データベースに「承認待ち」として登録
+                await databases.createDocument(DB_ID, 'users', newUser.$id, { 
+                    email: email, 
+                    status: 'pending' 
+                });
                 
-                inputsWrapper.classList.add('hidden');
-                otpContainer.classList.remove('hidden');
-                document.getElementById('auth-title').textContent = 'メール認証';
-                alert('認証コードをメールに送信しました。');
+                // 3. 管理者へメール通知（擬似）
+                await sendAdminRequestEmail(email);
+
+                // 4. すぐにログアウトさせてログイン画面に戻す
+                await account.deleteSession('current');
+                
+                alert('アカウントを作成しました。管理者の承認をお待ちください。');
+                location.reload();
             } else {
                 // 通常ログイン
                 await account.createEmailSession(email, pass);

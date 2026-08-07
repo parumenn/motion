@@ -1674,20 +1674,29 @@ document.getElementById('search-input')?.addEventListener('keydown', (e) => {
 
 // ================= 新規アカウント承認・管理関連 =================
 
-// ★ 1. 管理者へアカウント開設リクエストのメールを送る処理
+
+// ★ 1. 管理者へアカウント開設リクエストのメールを送る処理 (EmailJS実装)
 async function sendAdminRequestEmail(userEmail) {
-    // ※ EmailJS などのサービスを利用してフロントエンドからメールを送る例です。
-    console.log(`[擬似メール送信] 管理者 (thonglo02cocoa@gmail.com) 宛て`);
-    console.log(`本文: 新規ユーザー (${userEmail}) からアカウント開設のリクエストがありました。`);
-    
-    /* 
-    実際にはここに EmailJS のコード等を組み込みます。
-    例:
-    await emailjs.send("YOUR_SERVICE_ID", "YOUR_TEMPLATE_ID", {
-        admin_email: "thonglo02cocoa@gmail.com",
-        request_user_email: userEmail,
-    });
-    */
+    try {
+        // EmailJS の SDK が読み込まれている前提のコードです
+        // ※あらかじめ EmailJS のサービスID、テンプレートID、公開鍵を設定してください
+        const serviceID = 'service_iwdudmi';     // ご自身のEmailJSサービスIDに変更
+        const templateID = 'template_oba4fva';   // ご自身のEmailJSテンプレートIDに変更
+        const publicKey = 'Rr8sXv8O4BghLKFMX';     // ご自身のEmailJS公開鍵（Public Key）に変更
+
+        const templateParams = {
+            admin_email: 'thonglo02cocoa@gmail.com',
+            request_user_email: userEmail,
+            message: `新規ユーザー (${userEmail}) からアカウント開設のリクエストがありました。管理画面から承認を行ってください。`
+        };
+
+        // EmailJSを使ってメール送信
+        await emailjs.send(serviceID, templateID, templateParams, publicKey);
+        console.log('管理者へのメール通知が送信されました。');
+    } catch (err) {
+        console.error('管理者へのメール送信に失敗しました:', err);
+        // メールの送信に失敗しても、アカウント登録自体はロールバックさせない or 必要に応じてアラートを出す
+    }
 }
 
 // ★ 2. サイト上の管理者ページ等に組み込む「承認処理」の関数

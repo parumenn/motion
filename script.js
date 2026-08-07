@@ -70,6 +70,7 @@ async function savePrefs(key, value) {
 }
 
 // ================= 認証・初期化処理 =================
+// ================= 認証・初期化処理 =================
 async function initApp() {
     applyTheme();
     
@@ -80,26 +81,33 @@ async function initApp() {
     try {
         currentUser = await account.get();
         
-        // --- ★ 追加: アカウントの承認ステータスチェック ---
-        try {
-        currentUser = await account.get();
-        
-        // --- ★ 承認ステータスチェックの修正 ---
+        // --- アカウントの承認ステータスチェック ---
         try {
             const userDoc = await databases.getDocument(DB_ID, 'users', currentUser.$id);
-            
             if (userDoc.status !== 'approved') {
-                // 承認待ちの場合、ログイン済みセッションを削除してからメッセージを出す
                 await account.deleteSession('current');
                 currentUser = null;
                 alert('アカウントは現在管理者の承認待ちです。承認されるまでアクセスできません。');
                 showAuthModal();
                 return;
             }
+        } catch (err) {
+            await account.deleteSession('current');
+            currentUser = null;
+            alert('アカウントの承認情報が取得できません。承認待ちか、登録が未完了です。');
+            showAuthModal();
+            return;
+        }
         // ---------------------------------------------------
 
         document.getElementById('user-info-text').textContent = `ログイン中: ${currentUser.name} (${currentUser.email})`;
         
+        // ★ 管理者（thonglo02cocoa@gmail.com）の場合、設定画面の管理者タブを表示 & 未承認チェック
+        if (currentUser.email === 'thonglo02cocoa@gmail.com') {
+            document.getElementById('tab-btn-admin')?.classList.remove('hidden');
+            checkPendingUsersForAdmin();
+        }
+
         const savedUi = localStorage.getItem('motion_ui_state');
         if (savedUi) {
             const parsedUi = JSON.parse(savedUi);
@@ -1682,17 +1690,64 @@ document.getElementById('search-input')?.addEventListener('keydown', (e) => {
 
 // ★ 1. 管理者へアカウント開設リクエストのメールを送る処理 (EmailJS実装)
 async function sendAdminRequestEmail(userEmail) {
+    try {
+        // EmailJS の SDK が読み込まれている前提のコードです
+        // ※あらかじめ EmailJS のサービスID、テンプレートID、公開鍵を設定してください
+        const serviceID = 'service_iwdudmi';     // ご自身のEmailJSサービスIDに変更
+        const templateID = 'template_oba4fva';   // ご自身のEmailJSテンプレートIDに変更
+        const publicKey = 'Rr8sXv8O4BghLKFMX';     // ご自身のEmailJS公開鍵（Public Key）に変更
+
+        const templateParams = {
+            admin_email: 'thonglo02cocoa@gmail.com',
+            request_user_email: userEmail,
+            message: `新規ユーザー (${userEmail}) からアカウント開設のリクエストがありました。管理画面から承認を行ってください。`
+        };
+
+        // EmailJSを使ってメール送信
+        await emailjs.send(serviceID, templateID, templateParams, publicKey);
+        console.log('管理者へのメール通知が送信されました。');
+    } catch (err) {
+        console.error('管理者へのメール送信に失敗しました:', err);
+        // メールの送信に失敗しても、アカウント登録自体はロールバックさせない or 必要に応じてアラートを出す
+    }
 }
 
 // ★ 2. サイト上の管理者ページ等に組み込む「承認処理」の関数
 // この関数を管理者用のUI（ボタン等）から呼び出すことでアカウントを承認します。
 async function approveAccount(targetUserId) {
+    try {
+        await databases.updateDocument(DB_ID, 'users', targetUserId, { status: 'approved' });
+        alert('アカウントを承認しました。ユーザーはログイン可能になります。');
+    } catch (err) {
+        alert('承認エラー: ' + err.message);
+    }
 }
 
 // ================= 管理者専用機能 =================
 
 // 1. ログイン時に承認待ちユーザーを確認し、ポップアップで知らせる関数（案3）
 async function checkPendingUsersForAdmin() {
+    try {
+        const response = await databases.listDocuments(DB_ID, 'users', [
+            Query.equal('status', 'pending')
+        ]);
+
+        if (response.documents.length > 0) {
+            const count = response.documents.length;
+            const emails = response.documents.map(doc => doc.email).join(', ');
+            
+            // ポップアップ通知
+            setTimeout(() => {
+                if (confirm(`【管理者通知】\n現在、${count}件の新規アカウント承認待ちがあります。\n対象: ${emails}\n\n今すぐ設定画面から承認しますか？`)) {
+                    // 設定画面を開いて管理者タブをアクティブにする
+                    document.getElementById('settings-overlay').classList.remove('hidden');
+                    document.querySelector('.settings-tab[data-tab="admin"]')?.click();
+                }
+            }, 500);
+        }
+    } catch (err) {
+        console.error('承認待ちユーザーの確認に失敗しました:', err);
+    }
 }
 
 // 2. 設定タブが開かれたときに承認待ちリストを描画する処理

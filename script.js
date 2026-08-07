@@ -757,11 +757,11 @@ function renderBlocks(blockArray, container) {
 }
 
 // 非テキスト（画像やページリンク）ブロックでのキーボード操作ハンドラ（上下移動の確実化）
+// 非テキスト（画像やページリンク）ブロックでのキーボード操作ハンドラ（上下移動の確実化）
 function handleNonTextKeydown(e) {
     const wrapper = e.target.closest('.block-wrapper');
     if (!wrapper) return;
 
-    // ★ contentEl を宣言・取得
     const contentEl = wrapper.querySelector('.block-content');
 
     if (e.key === 'Backspace' || e.key === 'Delete') { 
@@ -800,22 +800,23 @@ function handleNonTextKeydown(e) {
         } else {
             pageTitleEl.focus();
         }
-    } else if (e.key === 'ArrowDown' || e.key === 'ArrowRight' || e.key === 'Enter') {
+    } else if (e.key === 'Enter') {
+        e.preventDefault();
+        const tempContainer = document.createElement('div');
+        const newId = generateId();
+        renderBlocks([{ id: newId, type: 'p', content: '', children: [] }], tempContainer);
+        const newBlock = tempContainer.firstElementChild;
+        wrapper.after(newBlock);
+        
+        const nc = newBlock.querySelector('.block-content');
+        if (nc) nc.focus();
+        
+        saveEditorState(true);
+        reinitSortables();
+    } else if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
         e.preventDefault(); 
         const next = wrapper.nextElementSibling;
-        if (e.key === 'Enter' || !next) {
-            const tempContainer = document.createElement('div');
-            const newId = generateId();
-            renderBlocks([{ id: newId, type: 'p', content: '', children: [] }], tempContainer);
-            const newBlock = tempContainer.firstElementChild;
-            wrapper.after(newBlock);
-            
-            const nc = newBlock.querySelector('.block-content');
-            if (nc) nc.focus();
-            
-            saveEditorState(true);
-            reinitSortables();
-        } else if (next && next.classList.contains('block-wrapper')) { 
+        if (next && next.classList.contains('block-wrapper')) { 
             const nc = next.querySelector('.block-content'); 
             if (nc) {
                 nc.focus(); 
@@ -974,7 +975,15 @@ function handleBlockKeydown(e) {
                 if (myChildren) while(myChildren.firstChild) wrapper.after(myChildren.firstChild);
                 wrapper.remove(); prevContent.focus(); setCaretPosition(prevContent, prevLen);
                 saveEditorState(true); closeSlashMenu();
-            } else { prevWrapper.remove(); saveEditorState(true); }
+            } else {
+                if (prevWrapper.dataset.type === 'image') {
+                    const imgEl = prevWrapper.querySelector('img');
+                    const fileId = prevWrapper.querySelector('.block-content')?.dataset.fileId;
+                    deleteImageFromStorage(imgEl?.src, fileId);
+                }
+                prevWrapper.remove(); 
+                saveEditorState(true); 
+            }
         }
     }
     else if (e.key === 'Delete' && offset === textLen) {
@@ -988,7 +997,15 @@ function handleBlockKeydown(e) {
                 if (nextChildren) while(nextChildren.firstChild) nextWrapper.after(nextChildren.firstChild);
                 nextWrapper.remove(); setCaretPosition(contentEl, offset);
                 saveEditorState(true); closeSlashMenu();
-            } else { nextWrapper.remove(); saveEditorState(true); }
+            } else {
+                if (nextWrapper.dataset.type === 'image') {
+                    const imgEl = nextWrapper.querySelector('img');
+                    const fileId = nextWrapper.querySelector('.block-content')?.dataset.fileId;
+                    deleteImageFromStorage(imgEl?.src, fileId);
+                }
+                nextWrapper.remove(); 
+                saveEditorState(true); 
+            }
         }
     }
     else if (e.key === 'ArrowUp') {

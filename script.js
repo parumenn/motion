@@ -79,19 +79,20 @@ async function initApp() {
     if (qualitySelect) qualitySelect.value = savedQuality;
 
     try {
-        currentUser = await account.get();
-        
-        // --- アカウントの承認ステータスチェック ---
-        try {
             const userDoc = await databases.getDocument(DB_ID, 'users', currentUser.$id);
             if (userDoc.status !== 'approved') {
-                // セッションを消す前に、すでにアラートを出しているか等のフラグ管理をするか、
-                // あるいはログイン画面側で「未承認です」という専用のメッセージを表示してループを止めます。
-                console.warn('承認待ちユーザーです。');
+                await account.deleteSession('current');
+                currentUser = null;
+                alert('アカウントは現在管理者の承認待ちです。承認されるまでアクセスできません。');
+                showAuthModal();
+                return; // 処理をここで完全にストップし、無限ループを防ぐ
             }
         } catch (err) {
-            // ドキュメントがない場合は自動修復として作成を試みる、またはループを防ぐ
-            console.error('ユーザー情報の取得に失敗しました', err);
+            await account.deleteSession('current');
+            currentUser = null;
+            alert('アカウントの承認情報が取得できません。承認待ちか、登録が未完了です。');
+            showAuthModal();
+            return; // 処理をここで完全にストップし、無限ループを防ぐ
         }
         // ---------------------------------------------------
 

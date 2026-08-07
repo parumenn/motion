@@ -1682,29 +1682,75 @@ document.getElementById('search-input')?.addEventListener('keydown', (e) => {
 
 // ================= 新規アカウント承認・管理関連 =================
 
-// ★ 1. 管理者へアカウント開設リクエストのメールを送る処理
+
+// ★ 1. 管理者へアカウント開設リクエストのメールを送る処理 (EmailJS実装)
 async function sendAdminRequestEmail(userEmail) {
-    // ※ EmailJS などのサービスを利用してフロントエンドからメールを送る例です。
-    console.log(`[擬似メール送信] 管理者 (thonglo02cocoa@gmail.com) 宛て`);
-    console.log(`本文: 新規ユーザー (${userEmail}) からアカウント開設のリクエストがありました。`);
-    
-    /* 
-    実際にはここに EmailJS のコード等を組み込みます。
-    例:
-    await emailjs.send("YOUR_SERVICE_ID", "YOUR_TEMPLATE_ID", {
-        admin_email: "thonglo02cocoa@gmail.com",
-        request_user_email: userEmail,
-    });
-    */
 }
 
 // ★ 2. サイト上の管理者ページ等に組み込む「承認処理」の関数
 // この関数を管理者用のUI（ボタン等）から呼び出すことでアカウントを承認します。
 async function approveAccount(targetUserId) {
-    try {
-        await databases.updateDocument(DB_ID, 'users', targetUserId, { status: 'approved' });
-        alert('アカウントを承認しました。ユーザーはログイン可能になります。');
-    } catch (err) {
-        alert('承認エラー: ' + err.message);
-    }
 }
+
+// ================= 管理者専用機能 =================
+
+// 1. ログイン時に承認待ちユーザーを確認し、ポップアップで知らせる関数（案3）
+async function checkPendingUsersForAdmin() {
+}
+
+// 2. 設定タブが開かれたときに承認待ちリストを描画する処理
+document.querySelector('.settings-tab[data-tab="admin"]')?.addEventListener('click', async () => {
+    const listContainer = document.getElementById('admin-pending-users-list');
+    if (!listContainer) return;
+    
+    listContainer.innerHTML = '<p style="font-size:13px; color:var(--text-muted);">読み込み中...</p>';
+
+    try {
+        const response = await databases.listDocuments(DB_ID, 'users', [
+            Query.equal('status', 'pending')
+        ]);
+
+        if (response.documents.length === 0) {
+            listContainer.innerHTML = '<p style="font-size:13px; color:var(--text-muted);">現在、承認待ちのユーザーはいません。</p>';
+            return;
+        }
+
+        listContainer.innerHTML = '';
+        response.documents.forEach(doc => {
+            const item = document.createElement('div');
+            item.style.cssText = 'display:flex; align-items:center; justify-content:space-between; padding:8px 12px; margin-bottom:8px; border:1px solid var(--border); border-radius:6px; background:var(--bg-hover);';
+            
+            item.innerHTML = `
+                <div>
+                    <div style="font-weight:500; font-size:14px;">${doc.email}</div>
+                    <div style="font-size:11px; color:var(--text-muted);">申請日時: ${new Date(doc.$createdAt).toLocaleString()}</div>
+                </div>
+                <button class="primary-btn" style="padding:4px 12px; font-size:12px; width:auto;" data-id="${doc.$id}">承認する</button>
+            `;
+
+            // 承認ボタンのクリックイベント
+            item.querySelector('button').onclick = async () => {
+                const btn = item.querySelector('button');
+                btn.disabled = true;
+                btn.textContent = '処理中...';
+                
+                try {
+                    await databases.updateDocument(DB_ID, 'users', doc.$id, {
+                        status: 'approved'
+                    });
+                    alert(`${doc.email} のアカウントを承認しました！`);
+                    // リストを再読み込み
+                    document.querySelector('.settings-tab[data-tab="admin"]').click();
+                } catch (e) {
+                    alert('承認エラー: ' + e.message);
+                    btn.disabled = false;
+                    btn.textContent = '承認する';
+                }
+            };
+
+            listContainer.appendChild(item);
+        });
+    } catch (err) {
+        listContainer.innerHTML = '<p style="font-size:13px; color:var(--danger);">リストの取得に失敗しました。</p>';
+    }
+});

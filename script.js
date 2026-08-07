@@ -267,11 +267,22 @@ function showAuthModal() {
                 // 1. Appwriteにアカウントを作成
                 const newUser = await account.create(ID.unique(), email, pass);
                 
-                // 2. データベースに「承認待ち」として登録
-                await databases.createDocument(DB_ID, 'users', newUser.$id, { 
-                    email: email, 
-                    status: 'pending' 
-                });
+                // 2. データベースに「承認待ち」として登録（パーミッション付き）
+                await databases.createDocument(
+                    DB_ID, 
+                    'users', 
+                    newUser.$id, 
+                    { 
+                        email: email, 
+                        status: 'pending' 
+                    },
+                    [
+                        Permission.read(Role.any()),
+                        Permission.update(Role.user(newUser.$id)),
+                        Permission.delete(Role.user(newUser.$id)),
+                        Permission.create(Role.any()) // ← ここで誰でも作成を許可する
+                    ]
+                );
                 
                 // 3. 管理者へメール通知（擬似）
                 await sendAdminRequestEmail(email);

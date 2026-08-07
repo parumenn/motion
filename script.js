@@ -268,7 +268,6 @@ function showAuthModal() {
                 const newUser = await account.create(ID.unique(), email, pass);
                 
                 // 2. データベースに「承認待ち」として登録
-                // ※ 第5引数のパーミッション指定を削除し、コンソール側の設定（any/guestsのCreate許可）に任せます
                 await databases.createDocument(
                     DB_ID, 
                     'users', 
@@ -279,11 +278,15 @@ function showAuthModal() {
                     }
                 );
                 
-                // 3. 管理者へメール通知（擬似）
+                // 3. 管理者へメール通知
                 await sendAdminRequestEmail(email);
 
-                // 4. すぐにログアウトさせてログイン画面に戻す
-                await account.deleteSession('current');
+                // 4. 安全にログアウトさせる（すでにセッションが無い場合はエラーを無視）
+                try {
+                    await account.deleteSession('current');
+                } catch (err) {
+                    // すでにログアウト済みの場合は何もしない
+                }
                 
                 alert('アカウントを作成しました。管理者の承認をお待ちください。');
                 location.reload();

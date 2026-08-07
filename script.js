@@ -302,15 +302,21 @@ function showAuthModal() {
                 
                 // 2. データベースに「承認待ち」として登録
                 // ※ 第5引数のパーミッション指定を削除し、コンソール側の設定（any/guestsのCreate許可）に任せます
-                await databases.createDocument(
-                    DB_ID, 
-                    'users', 
-                    newUser.$id, 
-                    { 
-                        email: email, 
-                        status: 'pending' 
-                    }
-                );
+                // AppwriteのPermissions定数を利用して権限を指定
+await databases.createDocument(
+    DB_ID, 
+    'users', 
+    newUser.$id, 
+    { 
+        email: email, 
+        status: 'pending' 
+    },
+    [
+        Permission.read(Role.any()),       // 誰でも読み取り可能
+        Permission.update(Role.users()),   // ログイン済みユーザー（管理者を含む）が更新可能
+        Permission.delete(Role.users())    // 念のため削除権限も付与
+    ]
+);
                 
                 // 3. 管理者へメール通知（擬似）
                 await sendAdminRequestEmail(email);

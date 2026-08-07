@@ -150,7 +150,7 @@ document.getElementById('btn-logout')?.addEventListener('click', async () => {
     location.reload();
 });
 
-// ================= Appwrite データ同期 (ページID一意管理＆重複一掃対応) =================
+// ================= Appwrite データ同期 =================
 async function loadDataFromAppwrite() {
     try {
         const response = await databases.listDocuments(DB_ID, COLLECTION_PAGES);
@@ -158,14 +158,11 @@ async function loadDataFromAppwrite() {
         state.pages = {};
         state.rootPages = [];
 
-        // 過去に量産された重複レコードを整理するためのマップ（pageId ごとに最新の1件だけ残し、他はサーバーから削除）
         const pageMap = {};
-
         for (const doc of response.documents) {
             if (!pageMap[doc.pageId]) {
                 pageMap[doc.pageId] = doc;
             } else {
-                // 重複分はサーバーから物理削除
                 try {
                     await databases.deleteDocument(DB_ID, COLLECTION_PAGES, doc.$id);
                 } catch (e) {}
@@ -203,8 +200,6 @@ async function loadDataFromAppwrite() {
             };
             state.pages[id] = initialPage;
             state.rootPages.push(id);
-            
-            // 初回は明示的に新規作成ドキュメントを発行して $id を取得
             await createPageInAppwrite(initialPage);
         }
     } catch (e) {
@@ -212,7 +207,6 @@ async function loadDataFromAppwrite() {
     }
 }
 
-// ページ新規作成時専用の関数（サーバー上に1度だけレコードを作る）
 async function createPageInAppwrite(page) {
     if (!currentUser) return;
     const payload = {
@@ -235,13 +229,11 @@ async function createPageInAppwrite(page) {
     }
 }
 
-// 既存ページの更新専用関数（タイピングやタイトル変更による上書き）
 async function saveDataToAppwrite(pageTarget) {
     if (!currentUser) return;
     const page = pageTarget || state.pages[state.currentPageId];
     if (!page || page.id === 'home') return;
 
-    // まだ $id がない場合は新規作成にフォールバック
     if (!page.$id) {
         await createPageInAppwrite(page);
         return;
@@ -415,7 +407,6 @@ function renderTree() {
 document.getElementById('sidebar-toggle-btn').addEventListener('click', () => { sidebar.classList.add('open'); sidebarOverlay.classList.add('active'); });
 sidebarOverlay.addEventListener('click', () => { sidebar.classList.remove('open'); sidebarOverlay.classList.remove('active'); });
 
-// ＋新規ページ作成時は、即座にサーバー側に空ドキュメントを作成してIDを確保する
 document.getElementById('add-page-btn').addEventListener('click', async () => {
     const id = generateId(); 
     const newPage = { 
@@ -426,10 +417,7 @@ document.getElementById('add-page-btn').addEventListener('click', async () => {
     };
     state.pages[id] = newPage;
     state.rootPages.push(id); 
-    
-    // サーバーにレコード作成
     await createPageInAppwrite(newPage);
-    
     saveData(); 
     renderTree(); 
     openPage(id); 
@@ -445,9 +433,7 @@ document.getElementById('ctx-add-subpage')?.addEventListener('click', async () =
         blocks: [{ id: generateId(), type: 'p', content: '', children: [] }] 
     };
     state.pages[childId] = childPage;
-    
     if(!state.expandedNodes.includes(contextMenuTargetId)) state.expandedNodes.push(contextMenuTargetId);
-    
     await createPageInAppwrite(childPage);
     saveData(); 
     renderTree(); 
@@ -578,7 +564,6 @@ function openPage(id) {
     if (window.innerWidth <= 768) { sidebar.classList.remove('open'); sidebarOverlay.classList.remove('active'); }
 }
 
-// タイトル入力の同期（自動保存の間隔を200msの高速レスポンスに設定）
 let titleDebounceTimer = null;
 pageTitleEl.addEventListener('input', (e) => {
     const val = e.target.value;
@@ -591,7 +576,7 @@ pageTitleEl.addEventListener('input', (e) => {
     clearTimeout(titleDebounceTimer);
     titleDebounceTimer = setTimeout(async () => {
         await saveData();
-    }, 200); // 200ミリ秒単位の高速自動同期
+    }, 200);
 });
 
 pageTitleEl.addEventListener('keydown', (e) => {
@@ -771,7 +756,6 @@ function saveEditorState(isStructuralChange = false) {
     if (isStructuralChange) { clearTimeout(saveDebounceTimer); executeSave(); }
     else { 
         clearTimeout(saveDebounceTimer); 
-        // 自動同期を200ミリ秒単位の高速レスポンスに設定
         saveDebounceTimer = setTimeout(executeSave, 200); 
     }
 }
@@ -917,9 +901,25 @@ function handleBlockKeydown(e) {
     }
 }
 
+// ================= クリップボードからの画像ペースト（Ctrl + V）対応 =================
 function handleBlockPaste(e) {
-    e.preventDefault();
     const clipboardData = e.clipboardData || window.clipboardData;
+    const items = clipboardData.items;
+    
+    for (let i = 0; i < items.length; i++) {
+        if (items[i].type.indexOf('image') !== -1) {
+            e.preventDefault();
+            const file = items[i].getAsFile();
+            const wrapper = e.target.closest('.block-wrapper');
+            if (file && wrapper) {
+                uploadAndInsertImage(file, wrapper);
+            }
+            return;
+        }
+    }
+
+    // 画像以外の場合は通常のテキスト処理
+    e.preventDefault();
     const pastedText = clipboardData.getData('text/plain');
     const sel = window.getSelection();
     const isUrl = /^https?:\/\//i.test(pastedText.trim());
@@ -1087,10 +1087,16 @@ document.getElementById('link-submit')?.addEventListener('click', () => {
     document.getElementById('link-overlay').classList.add('hidden');
 });
 
-// ================= 画像アップロード (Appwrite Storage 対応 ＆ 圧縮選択) =================
+// ================= 画像アップロード (Appwrite Storage 確実保存対応) =================
 document.getElementById('image-upload-input').addEventListener('change', async function(e) {
-    const file = e.target.files[0]; if(!file || !slashTargetBlock) return;
+    const file = e.target.files[0]; 
+    if(!file || !slashTargetBlock) return;
     
+    await uploadAndInsertImage(file, slashTargetBlock);
+    this.value = '';
+});
+
+async function uploadAndInsertImage(file, targetBlock) {
     const qualityMode = localStorage.getItem('motion_image_quality') || 'original';
     let fileToUpload = file;
 
@@ -1099,27 +1105,33 @@ document.getElementById('image-upload-input').addEventListener('change', async f
     }
 
     try {
+        // AppwriteのStorage仕様に準拠した安全なファイルオブジェクトの生成
+        const safeName = `img_${Date.now()}_${Math.random().toString(36.2, 9).substring(2, 7)}.jpg`;
+        const uploadFile = new File([fileToUpload], safeName, { type: fileToUpload.type || 'image/jpeg' });
+
         const fileUploadRes = await storage.createFile(
             BUCKET_ID,
             ID.unique(),
-            fileToUpload,
+            uploadFile,
             [
-                Permission.read(Role.user(currentUser.$id)),
+                Permission.read(Role.any()),
                 Permission.write(Role.user(currentUser.$id))
             ]
         );
 
+        // ストレージからの画像プレビューURL取得
         const fileUrl = storage.getFileView(BUCKET_ID, fileUploadRes.$id);
 
         const temp = document.createElement('div');
-        renderBlocks([{ id: slashTargetBlock.dataset.id, type: 'image', content: fileUrl, children:[] }], temp);
-        slashTargetBlock.replaceWith(temp.firstElementChild);
-        saveEditorState(true); reinitSortables(); this.value = '';
+        renderBlocks([{ id: targetBlock.dataset.id, type: 'image', content: fileUrl, children:[] }], temp);
+        targetBlock.replaceWith(temp.firstElementChild);
+        saveEditorState(true); 
+        reinitSortables();
     } catch (err) {
         alert("画像のアップロードに失敗しました: " + err.message);
         console.error(err);
     }
-});
+}
 
 function compressImage(file, maxWidth, quality) {
     return new Promise((resolve) => {
@@ -1144,7 +1156,7 @@ function compressImage(file, maxWidth, quality) {
                 ctx.drawImage(img, 0, 0, width, height);
 
                 canvas.toBlob((blob) => {
-                    resolve(new File([blob], file.name, { type: 'image/jpeg', lastModified: Date.now() }));
+                    resolve(new File([blob], file.name || 'image.jpg', { type: 'image/jpeg', lastModified: Date.now() }));
                 }, 'image/jpeg', quality);
             };
         };

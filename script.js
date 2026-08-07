@@ -256,6 +256,7 @@ function showAuthModal() {
         passwordInput.setAttribute('autocomplete', isSignUp ? 'new-password' : 'current-password');
     };
 
+
     // ログインまたはコード送信ボタン
     authSubmit.onclick = async () => {
         const email = usernameInput.value.trim();
@@ -265,9 +266,13 @@ function showAuthModal() {
 
         try {
             if (isSignUp) {
-                // ★ Appwrite Email OTP（6桁コード送信）を呼び出し
-                const token = await account.createEmailToken(ID.unique(), email);
-                tempAuthData = { userId: token.userId, pass, email };
+                // ★修正1: まずAppwriteにユーザーを仮登録する
+                // ※パスワードの文字数制限（デフォルト8文字以上など）に注意してください
+                const newUser = await account.create(ID.unique(), email, pass);
+                
+                // ★修正2: 登録したユーザーIDに対してEmail OTP（6桁コード）を発行・送信する
+                const token = await account.createEmailToken(newUser.$id, email);
+                tempAuthData = { userId: newUser.$id, email };
                 
                 // UIをコード入力画面に切り替え
                 inputsWrapper.classList.add('hidden');
@@ -287,17 +292,14 @@ function showAuthModal() {
         }
     };
 
-    // ★ 6桁コードの検証・アカウント作成完了処理
+    // ★ 6桁コードの検証・申請完了処理
     document.getElementById('auth-otp-submit').onclick = async () => {
         const secret = document.getElementById('auth-otp').value.trim();
         if(!secret) return alert('認証コードを入力してください');
         
         try {
-            // OTPで認証し、一時的にログインセッションを作成
+            // ★修正3: OTP（6桁コード）でセッションを作成してメール認証を完了させる
             await account.createSession(tempAuthData.userId, secret);
-            
-            // ユーザーが入力していたパスワードを設定
-            await account.updatePassword(tempAuthData.pass);
             
             // データベースに「承認待ち」として登録
             await databases.createDocument(DB_ID, 'users', tempAuthData.userId, { 

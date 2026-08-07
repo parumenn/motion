@@ -647,14 +647,23 @@ overlayIds.forEach(id => {
 
 function showPasswordModal(lockParentId, onSuccess) {
     const overlay = document.getElementById('overlay'), modalPass = document.getElementById('modal-pass');
-    overlay.classList.remove('hidden'); modalPass.value = ''; modalPass.focus();
+    overlay.classList.remove('hidden'); 
+    modalPass.value = ''; 
+    modalPass.focus();
     
     document.getElementById('modal-submit').onclick = () => {
-        const pass = modalPass.value; const parentPage = state.pages[lockParentId];
-        parentPage.password = pass; parentPage.isUnlockedSession = true;
-        overlay.classList.add('hidden'); if(onSuccess) onSuccess();
+        const pass = modalPass.value; 
+        const parentPage = state.pages[lockParentId];
+        parentPage.password = pass; 
+        parentPage.isUnlockedSession = true;
+        
+        // 保存ポップアップの判定を防ぐため値をクリアしてから閉じる
+        modalPass.value = '';
+        overlay.classList.add('hidden'); 
+        if(onSuccess) onSuccess();
     };
 }
+
 document.getElementById('modal-cancel')?.addEventListener('click', () => document.getElementById('overlay').classList.add('hidden'));
 document.getElementById('lock-btn')?.addEventListener('click', () => {
     const page = state.pages[state.currentPageId];

@@ -143,22 +143,40 @@ const usernameToEmail = (username) => `${username.toLowerCase()}@motion.local`;
 function showAuthModal() {
     const authOverlay = document.getElementById('login-overlay');
     if (!authOverlay) return;
-    authOverlay.classList.remove('hidden');
-    let isSignUp = false;
 
+    // 入力要素を取得
+    const usernameInput = document.getElementById('auth-username');
+    const passwordInput = document.getElementById('auth-password');
     const authSubmit = document.getElementById('auth-submit-btn');
     const authToggle = document.getElementById('auth-toggle-btn');
 
+    // ★ モーダル表示時にフォームを初期化（空にする）
+    usernameInput.value = '';
+    passwordInput.value = '';
+
+    authOverlay.classList.remove('hidden');
+    let isSignUp = false;
+
+    // アカウント作成 / ログインの切り替え処理
     authToggle.onclick = () => {
         isSignUp = !isSignUp;
+        
+        // 表示テキストの切り替え
         document.getElementById('auth-title').textContent = isSignUp ? 'アカウント作成' : 'ログイン';
         authSubmit.textContent = isSignUp ? '作成してログイン' : 'ログイン';
         authToggle.textContent = isSignUp ? 'ログインへ切替' : 'アカウント作成へ切替';
+
+        // ★ 切替時にも入力をリセット
+        usernameInput.value = '';
+        passwordInput.value = '';
+
+        // ★ ブラウザ補完用属性の切り替え（ログイン: current-password / 新規登録: new-password）
+        passwordInput.setAttribute('autocomplete', isSignUp ? 'new-password' : 'current-password');
     };
 
     authSubmit.onclick = async () => {
-        const username = document.getElementById('auth-username').value.trim();
-        const pass = document.getElementById('auth-password').value.trim();
+        const username = usernameInput.value.trim();
+        const pass = passwordInput.value.trim();
         const email = usernameToEmail(username);
 
         if (!username || !pass) return alert('ユーザー名とパスワードを入力してください');
@@ -168,14 +186,18 @@ function showAuthModal() {
                 await account.create(ID.unique(), email, pass, username);
             }
             await account.createEmailSession(email, pass);
+            
+            // 成功時にモーダルを閉じてフォームクリア
+            usernameInput.value = '';
+            passwordInput.value = '';
             authOverlay.classList.add('hidden');
+            
             location.reload();
         } catch (e) {
             alert(`エラー: ${e.message}`);
         }
     };
 }
-
 document.getElementById('btn-change-pass')?.addEventListener('click', async () => {
     const oldPass = document.getElementById('change-pass-old').value;
     const newPass = document.getElementById('change-pass-new').value;

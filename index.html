@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Motion</title>
     
+    <!-- ★追加: ファビコン設定 (絵文字 📝 ) -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📝</text></svg>">
+
     <!-- フォント: Noto Sans JP -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -15,28 +18,26 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
 
-
-<script src="https://cdn.jsdelivr.net/npm/appwrite@13.0.1"></script>
+    <script src="https://cdn.jsdelivr.net/npm/appwrite@13.0.1"></script>
     
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 
-
 <!-- 認証モーダル（未ログイン時） -->
-<div id="auth-overlay" class="hidden">
+<!-- ★修正: IDを login-overlay に変更（CSSの最前面・不透明化に追従） -->
+<div id="login-overlay" class="hidden">
     <div class="modal">
         <h3 id="auth-title">ログイン</h3>
         <form id="auth-form" onsubmit="return false;" autocomplete="on">
-            <input type="text" id="auth-username" name="username" placeholder="ユーザー名 (例: user)" value="user" autocomplete="username">
+            <!-- ★修正: value="user" を削除し placeholder="user" のみに調整 -->
+            <input type="text" id="auth-username" name="username" placeholder="user" autocomplete="username">
             <input type="password" id="auth-password" name="password" placeholder="パスワード" value="pass" autocomplete="current-password">
             <button type="button" id="auth-submit-btn" class="primary-btn">ログイン</button>
             <button type="button" id="auth-toggle-btn" class="cancel-btn">アカウント作成へ切替</button>
         </form>
     </div>
 </div>
-
-
 
     <nav id="sidebar">
         <div class="sidebar-header">
@@ -127,24 +128,13 @@
     <div id="slash-menu" class="hidden"></div>
     <input type="file" id="image-upload-input" accept="image/*" style="display:none;">
 
-
     <!-- パスワード入力モーダル -->
 <div id="overlay" class="hidden">
     <div class="modal" id="modal-box">
         <h3 id="modal-title">ページはロックされています</h3>
         <p class="modal-desc">パスワードを入力して解除してください</p>
         <form id="lock-pass-form" onsubmit="return false;">
-            <input 
-  type="text" 
-  id="modal-pass" 
-  autocomplete="one-time-code"
-  data-1p-ignore="true"
-  data-bwignore="true"
-  data-lpignore="true"
-  data-form-type="other"
-  style="-webkit-text-security: disc; text-security: disc;"
-  placeholder="パスワードを入力"
-/>
+            <input type="password" id="modal-pass" name="lock-password" placeholder="パスワード" autocomplete="current-password">
             <button type="button" id="modal-submit" class="primary-btn">解除</button>
             <button type="button" id="modal-cancel" class="cancel-btn">キャンセル</button>
         </form>
@@ -197,7 +187,6 @@
     <button id="btn-change-pass" class="primary-btn">パスワード更新</button>
     <button id="btn-logout" class="danger-btn" style="margin-top:24px;">ログアウト</button>
 </div>
-
 
                 <div id="tab-data" class="tab-pane hidden">
                     <h3>データ管理</h3>

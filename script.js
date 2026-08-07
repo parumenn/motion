@@ -91,7 +91,7 @@ function showAuthModal() {
                 await account.create(ID.unique(), email, pass, username);
             }
             // セッション作成（ログイン）
-            await account.createEmailPasswordSession(email, pass);
+            await account.createEmailSession(email, pass);
             authOverlay.classList.add('hidden');
             location.reload();
         } catch (e) {

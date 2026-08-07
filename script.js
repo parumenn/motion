@@ -289,6 +289,14 @@ function showAuthModal() {
                 location.reload();
             } else {
                 // 通常ログイン
+                try {
+                    // すでにセッションがあればあらかじめ削除しておく
+                    await account.deleteSession('current');
+                } catch (e) {
+                    // セッションがない場合はエラーになるので無視する
+                }
+
+                // 新しくログインセッションを作成
                 await account.createEmailSession(email, pass);
                 usernameInput.value = '';
                 passwordInput.value = '';

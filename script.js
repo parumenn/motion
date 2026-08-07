@@ -410,9 +410,11 @@ async function createPageInAppwrite(page) {
         blocks: JSON.stringify(page.blocks),
         isLocked: page.isLocked || false
     };
-    const permissions = [
+   const permissions = [
         Permission.read(Role.any()),
-        Permission.write(Role.user(currentUser.$id))
+        Permission.write(Role.user(currentUser.$id)),
+        // もし新規作成時にエラーが出る場合は、create権限をanyにするか、ログイン後に実行する
+        Permission.create(Role.any()) 
     ];
 
     try {

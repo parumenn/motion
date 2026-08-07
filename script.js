@@ -71,7 +71,20 @@ async function savePrefs(key, value) {
 
 // ================= 認証・初期化処理 =================
 async function initApp() {
+    
     applyTheme();
+
+    // ログイン中のユーザー情報表示
+        document.getElementById('user-info-text').textContent = `ログイン中: ${currentUser.name} (${currentUser.email})`;
+        
+        // ★ 管理者（thonglo02cocoa@gmail.com）の場合の特別処理
+        if (currentUser.email === 'thonglo02cocoa@gmail.com') {
+            // 設定画面の管理者タブを表示する
+            document.getElementById('tab-btn-admin')?.classList.remove('hidden');
+            // 承認待ちユーザーがいないかチェックしてポップアップ通知する
+            checkPendingUsersForAdmin();
+        }
+    
     
     const savedQuality = localStorage.getItem('motion_image_quality') || 'original';
     const qualitySelect = document.getElementById('setting-image-quality');
@@ -1712,3 +1725,87 @@ async function approveAccount(targetUserId) {
         alert('承認エラー: ' + err.message);
     }
 }
+
+// ================= 管理者専用機能 =================
+
+// 1. ログイン時に承認待ちユーザーを確認し、ポップアップで知らせる関数（案3）
+async function checkPendingUsersForAdmin() {
+    try {
+        const response = await databases.listDocuments(DB_ID, 'users', [
+            Query.equal('status', 'pending')
+        ]);
+
+        if (response.documents.length > 0) {
+            const count = response.documents.length;
+            const emails = response.documents.map(doc => doc.email).join(', ');
+            
+            // ポップアップ通知
+            setTimeout(() => {
+                if (confirm(`【管理者通知】\n現在、${count}件の新規アカウント承認待ちがあります。\n対象: ${emails}\n\n今すぐ設定画面から承認しますか？`)) {
+                    // 設定画面を開いて管理者タブをアクティブにする
+                    document.getElementById('settings-overlay').classList.remove('hidden');
+                    document.querySelector('.settings-tab[data-tab="admin"]')?.click();
+                }
+            }, 500);
+        }
+    } catch (err) {
+        console.error('承認待ちユーザーの確認に失敗しました:', err);
+    }
+}
+
+// 2. 設定タブが開かれたときに承認待ちリストを描画する処理
+document.querySelector('.settings-tab[data-tab="admin"]')?.addEventListener('click', async () => {
+    const listContainer = document.getElementById('admin-pending-users-list');
+    if (!listContainer) return;
+    
+    listContainer.innerHTML = '<p style="font-size:13px; color:var(--text-muted);">読み込み中...</p>';
+
+    try {
+        const response = await databases.listDocuments(DB_ID, 'users', [
+            Query.equal('status', 'pending')
+        ]);
+
+        if (response.documents.length === 0) {
+            listContainer.innerHTML = '<p style="font-size:13px; color:var(--text-muted);">現在、承認待ちのユーザーはいません。</p>';
+            return;
+        }
+
+        listContainer.innerHTML = '';
+        response.documents.forEach(doc => {
+            const item = document.createElement('div');
+            item.style.cssText = 'display:flex; align-items:center; justify-content:space-between; padding:8px 12px; margin-bottom:8px; border:1px solid var(--border); border-radius:6px; background:var(--bg-hover);';
+            
+            item.innerHTML = `
+                <div>
+                    <div style="font-weight:500; font-size:14px;">${doc.email}</div>
+                    <div style="font-size:11px; color:var(--text-muted);">申請日時: ${new Date(doc.$createdAt).toLocaleString()}</div>
+                </div>
+                <button class="primary-btn" style="padding:4px 12px; font-size:12px; width:auto;" data-id="${doc.$id}">承認する</button>
+            `;
+
+            // 承認ボタンのクリックイベント
+            item.querySelector('button').onclick = async () => {
+                const btn = item.querySelector('button');
+                btn.disabled = true;
+                btn.textContent = '処理中...';
+                
+                try {
+                    await databases.updateDocument(DB_ID, 'users', doc.$id, {
+                        status: 'approved'
+                    });
+                    alert(`${doc.email} のアカウントを承認しました！`);
+                    // リストを再読み込み
+                    document.querySelector('.settings-tab[data-tab="admin"]').click();
+                } catch (e) {
+                    alert('承認エラー: ' + e.message);
+                    btn.disabled = false;
+                    btn.textContent = '承認する';
+                }
+            };
+
+            listContainer.appendChild(item);
+        });
+    } catch (err) {
+        listContainer.innerHTML = '<p style="font-size:13px; color:var(--danger);">リストの取得に失敗しました。</p>';
+    }
+});

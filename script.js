@@ -19,16 +19,19 @@ let pendingImageTargetBlock = null; // 画像アップロード対象ブロッ�
 // Appwrite Storageから画像を削除する処理
 async function deleteImageFromStorage(fileUrl, fileId) {
     let idToDelete = fileId;
+    
+    // fileId が無い場合は URL から抽出 (/files/ファイルID/view などの形式)
     if (!idToDelete && fileUrl) {
-        // URLからfileIdを抽出 (/files/{fileId}/view)
-        const match = fileUrl.match(/\/files\/([^\/]+)\//);
+        const match = fileUrl.match(/\/files\/([^\/?#]+)/);
         if (match) idToDelete = match[1];
     }
+    
     if (idToDelete) {
         try {
             await storage.deleteFile(BUCKET_ID, idToDelete);
+            console.log('Storageからファイルを削除しました:', idToDelete);
         } catch (e) {
-            console.error('Storage delete error:', e);
+            console.error('Storage削除エラー:', e);
         }
     }
 }
@@ -757,18 +760,23 @@ function renderBlocks(blockArray, container) {
 function handleNonTextKeydown(e) {
     const wrapper = e.target.closest('.block-wrapper');
     if (!wrapper) return;
-    
-    // ★ 追加: contentEl を宣言しておく
+
+    // ★ contentEl を宣言・取得
     const contentEl = wrapper.querySelector('.block-content');
 
     if (e.key === 'Backspace' || e.key === 'Delete') { 
         e.preventDefault(); 
         const prev = wrapper.previousElementSibling; 
 
+        // 画像ブロックの場合はStorageからファイル削除を実行
         if (wrapper.dataset.type === 'image') {
             const imgEl = wrapper.querySelector('img');
             const fileId = contentEl?.dataset.fileId;
-            if (imgEl) deleteImageFromStorage(imgEl.src, fileId);
+            const imgUrl = imgEl ? imgEl.src : null;
+            
+            if (imgUrl || fileId) {
+                deleteImageFromStorage(imgUrl, fileId);
+            }
         }
         
         wrapper.remove(); 
@@ -796,7 +804,6 @@ function handleNonTextKeydown(e) {
         e.preventDefault(); 
         const next = wrapper.nextElementSibling;
         if (e.key === 'Enter' || !next) {
-            // 画像等の下でEnterを押す、または下が無い場合は新しい段落を作る
             const tempContainer = document.createElement('div');
             const newId = generateId();
             renderBlocks([{ id: newId, type: 'p', content: '', children: [] }], tempContainer);
@@ -1227,14 +1234,14 @@ async function uploadAndInsertImage(file, targetBlock) {
             uploadFile,
             [
                 Permission.read(Role.any()),
-                Permission.write(Role.user(currentUser.$id))
+                Permission.update(Role.user(currentUser.$id)),
+                Permission.delete(Role.user(currentUser.$id))
             ]
         );
 
         const fileUrl = storage.getFileView(BUCKET_ID, fileUploadRes.$id);
 
         const temp = document.createElement('div');
-        // fileId も渡す
         renderBlocks([{ 
             id: targetBlock.dataset.id, 
             type: 'image', 

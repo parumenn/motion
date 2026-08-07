@@ -27,10 +27,12 @@
 <div id="auth-overlay" class="hidden">
     <div class="modal">
         <h3 id="auth-title">ログイン</h3>
-        <input type="text" id="auth-username" placeholder="ユーザー名 (例: user)" value="user">
-        <input type="password" id="auth-password" placeholder="パスワード" value="pass">
-        <button id="auth-submit-btn" class="primary-btn">ログイン</button>
-        <button id="auth-toggle-btn" class="cancel-btn">アカウント作成へ切替</button>
+        <form id="auth-form" onsubmit="return false;" autocomplete="on">
+            <input type="text" id="auth-username" name="username" placeholder="ユーザー名 (例: user)" value="user" autocomplete="username">
+            <input type="password" id="auth-password" name="password" placeholder="パスワード" value="pass" autocomplete="current-password">
+            <button type="button" id="auth-submit-btn" class="primary-btn">ログイン</button>
+            <button type="button" id="auth-toggle-btn" class="cancel-btn">アカウント作成へ切替</button>
+        </form>
     </div>
 </div>
 
@@ -71,7 +73,7 @@
         <div class="editor-wrapper" id="editor-wrapper" class="hidden">
             <div id="breadcrumb" class="breadcrumb"></div>
             <div class="page-header">
-                <input type="text" id="page-title" placeholder="無題" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" role="presentation">
+                <input type="text" id="page-title" name="page-title-field" placeholder="無題" autocomplete="none" autocorrect="off" autocapitalize="off" spellcheck="false" role="presentation">
                 <button class="lock-btn" id="lock-btn">
                     <svg class="icon"><use href="#icon-lock"></use></svg><span id="lock-text">ロック</span>
                 </button>
@@ -131,9 +133,11 @@
     <div class="modal" id="modal-box">
         <h3 id="modal-title">ページはロックされています</h3>
         <p class="modal-desc">パスワードを入力して解除してください</p>
-        <input type="password" id="modal-pass" placeholder="パスワード" autocomplete="current-password">
-        <button id="modal-submit" class="primary-btn">解除</button>
-        <button id="modal-cancel" class="cancel-btn">キャンセル</button>
+        <form id="lock-pass-form" onsubmit="return false;">
+            <input type="password" id="modal-pass" name="lock-password" placeholder="パスワード" autocomplete="current-password">
+            <button type="button" id="modal-submit" class="primary-btn">解除</button>
+            <button type="button" id="modal-cancel" class="cancel-btn">キャンセル</button>
+        </form>
     </div>
 </div>
     

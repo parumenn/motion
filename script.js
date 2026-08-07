@@ -1,167 +1,1385 @@
-:root { 
-    --bg-main: #ffffff; --bg-sidebar: #f7f7f5; --bg-hover: #efefed; 
-    --text-main: #37352f; --text-muted: #9a9a97; --border: #e9e9e7; 
-    --accent: #2383e2; 
-    --font-family: 'Noto Sans JP', system-ui, -apple-system, sans-serif; 
-}
-body.dark-mode { 
-    --bg-main: #22272e; --bg-sidebar: #1c2128; --bg-hover: #2d333b; 
-    --text-main: #adbac7; --text-muted: #768390; --border: #444c56; 
-}
+const DB_KEY = 'local_workspace_data';
+const COMMANDS = [
+    { id: 'image', label: 'Image', desc: '画像を挿入', keys: ['image', '画像', 'pic'] },
+    { id: 'link', label: 'Web Link', desc: 'Webリンクを挿入', keys: ['link', 'リンク'] },
+    { id: 'page', label: 'Page', desc: 'サブページを作成', keys: ['page', 'ページ'] },
+    { id: 'linkpage', label: 'Link to Page', desc: '既存ページへのリンク', keys: ['linkpage', 'ページリンク'] },
+    { id: 'h1', label: 'Heading 1', desc: '大見出し', keys: ['h1', '見出し1'] },
+    { id: 'h2', label: 'Heading 2', desc: '中見出し', keys: ['h2', '見出し2'] },
+    { id: 'h3', label: 'Heading 3', desc: '小見出し', keys: ['h3', '見出し3'] },
+    { id: 'todo', label: 'To-do list', desc: 'タスク管理', keys: ['todo', 'タスク'] },
+    { id: 'toggle', label: 'Toggle list', desc: '折りたたみリスト', keys: ['toggle', 'トグル'] }
+];
 
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: var(--font-family); color: var(--text-main); display: flex; height: 100vh; overflow: hidden; background: var(--bg-main); transition: background 0.2s, color 0.2s; }
-.hidden { display: none !important; }
-.icon { width: 16px; height: 16px; fill: currentColor; display: inline-block; vertical-align: middle; }
-::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+let state = { pages: {}, rootPages: [], currentPageId: null, expandedNodes: [], recentPages: [] };
+let sortableInstances = [];
 
-/* ================= アニメーション定義 ================= */
-@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-@keyframes popIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
-@keyframes slideDown { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+let historyStack = {}; 
+let historyIndex = {};
 
-#overlay:not(.hidden), #search-overlay:not(.hidden), #link-overlay:not(.hidden), #ext-link-overlay:not(.hidden), #settings-overlay:not(.hidden) { animation: fadeIn 0.15s ease-out; }
-.modal, .settings-modal, .search-modal { animation: popIn 0.2s ease-out; }
-#slash-menu:not(.hidden), #context-menu:not(.hidden), #floating-menu:not(.hidden) { animation: popIn 0.1s ease-out; }
+const generateId = () => '_' + Math.random().toString(36).substr(2, 9);
+const clone = (obj) => JSON.parse(JSON.stringify(obj));
 
+// ================= Appwrite 初期化 =================
+const { Client, Account, Databases, Storage, ID, Query, Permission, Role } = Appwrite;
 
-/* ================= サイドバー周辺 ================= */
-#sidebar { width: 260px; background: var(--bg-sidebar); border-right: 1px solid var(--border); display: flex; flex-direction: column; z-index:100; }
-.sidebar-header { padding: 16px; font-weight: 600; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
-#search-btn { background:none; border:none; color:var(--text-muted); cursor:pointer; }
-.sidebar-home { padding: 8px 16px; cursor: pointer; display: flex; align-items: center; gap: 8px; font-weight: 500; transition: 0.2s; color: var(--text-muted); border-bottom: 1px solid var(--border); }
-.sidebar-home:hover, .sidebar-home.active { background: var(--bg-hover); color: var(--text-main); }
-.tree-container { flex: 1; overflow-y: auto; padding: 8px 0; }
-.tree-item { display: flex; align-items: center; padding: 4px 16px; cursor: pointer; user-select: none; }
-.tree-item:hover, .tree-item.active { background: var(--bg-hover); }
-.tree-toggle { width: 20px; font-size:10px; color: var(--text-muted); }
-.tree-title { flex: 1; margin-left: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sidebar-footer { padding: 12px; display: flex; gap: 8px; border-top: 1px solid var(--border); }
-#add-page-btn, #settings-btn { padding: 8px; border: 1px dashed var(--border); background: transparent; cursor: pointer; color: var(--text-muted); border-radius: 6px; transition: 0.2s; flex:1;}
-#settings-btn { flex:0; border-style:solid; }
+const client = new Client()
+    .setEndpoint('https://nyc.cloud.appwrite.io/v1')
+    .setProject('6a75a37300149977659a');
 
+const account = new Account(client);
+const databases = new Databases(client);
+const storage = new Storage(client);
 
-/* ================= メイン・エディタ周辺 ================= */
-#main { flex: 1; overflow-y: scroll; display: flex; flex-direction: column; align-items: center; position: relative; }
+const DB_ID = 'motion_db';
+const COLLECTION_PAGES = 'pages';
+const BUCKET_ID = 'motion_storage';
 
-/* ホーム画面 */
-.home-wrapper { width: 100%; max-width: 800px; padding: 60px 40px 0; flex: 1; }
-.home-title { font-size: 32px; font-weight: 700; margin-bottom: 32px; }
-.home-section h2 { font-size: 16px; color: var(--text-muted); margin-bottom: 16px; font-weight: 600; }
-.recent-pages-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; }
-.recent-page-card { border: 1px solid var(--border); border-radius: 8px; padding: 16px; cursor: pointer; display: flex; align-items: center; gap: 8px; font-weight: 500; transition: 0.2s; background: transparent; }
-.recent-page-card:hover { background: var(--bg-hover); transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
-.recent-page-card span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
+let currentUser = null;
 
-.editor-wrapper { width: 100%; max-width: 800px; padding: 60px 40px 0; display: flex; flex-direction: column; flex: 1; }
-.breadcrumb { font-size: 13px; color: var(--text-muted); margin-bottom: 16px; display: flex; gap: 6px; }
-.breadcrumb-item { cursor: pointer; } .breadcrumb-item:hover { color: var(--text-main); text-decoration: underline; }
-.page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 30px; }
-#page-title { font-size: 40px; font-weight: 700; border: none; outline: none; width: 100%; color: var(--text-main); background: transparent; }
-.lock-btn { background: transparent; border: 1px solid var(--border); padding: 6px 12px; border-radius: 4px; cursor: pointer; color: var(--text-muted); display: flex; gap: 4px; align-items: center; white-space: nowrap; transition: 0.2s; }
-.lock-btn:hover { background: var(--bg-hover); }
-.lock-btn.locked { color: var(--accent); border-color: var(--accent); background: rgba(35, 131, 226, 0.1); }
+// ================= 認証・初期化処理 =================
+async function initApp() {
+    applyTheme();
+    
+    const savedQuality = localStorage.getItem('motion_image_quality') || 'original';
+    const qualitySelect = document.getElementById('setting-image-quality');
+    if (qualitySelect) qualitySelect.value = savedQuality;
 
-/* ブロック構造 */
-.block-wrapper { display: flex; flex-direction: column; padding: 2px 0; }
-.block-main { display: flex; align-items: flex-start; position: relative; }
-.block-children { margin-left: 12px; padding-left: 12px; border-left: 1px solid var(--border); }
-.drag-handle { width: 24px; color: var(--text-muted); cursor: grab; opacity: 0; transition: 0.2s; }
-.block-main:hover .drag-handle { opacity: 1; }
-.block-content { flex: 1; outline: none; min-height: 24px; padding: 4px 2px; line-height: 1.6; font-size: 16px; white-space: pre-wrap; word-break: break-word;}
-.block-content:focus[data-placeholder]:empty::before { content: attr(data-placeholder); color: var(--border); position: absolute; pointer-events: none;}
-.block-content img { max-width: 100%; border-radius: 4px; display: block; margin: 8px 0; }
-.block-content a { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; transition: 0.2s; }
-.block-content a:hover { opacity: 0.8; }
+    try {
+        currentUser = await account.get();
+        document.getElementById('user-info-text').textContent = `ログイン中: ${currentUser.name} (${currentUser.email})`;
+        
+        const savedUi = localStorage.getItem('motion_ui_state');
+        if (savedUi) {
+            const parsedUi = JSON.parse(savedUi);
+            state.expandedNodes = parsedUi.expandedNodes || [];
+            state.recentPages = parsedUi.recentPages || [];
+        }
 
-/* ブロックデザイン */
-.block-wrapper[data-type="h1"] > .block-main > .block-content { font-size: 30px; font-weight: 700; margin-top: 12px; }
-.block-wrapper[data-type="h2"] > .block-main > .block-content { font-size: 24px; font-weight: 600; margin-top: 8px; }
-.block-wrapper[data-type="h3"] > .block-main > .block-content { font-size: 20px; font-weight: 600; margin-top: 4px; }
-.todo-checkbox { width: 16px; height: 16px; border: 2px solid var(--text-muted); border-radius: 3px; margin-right: 8px; margin-top: 9px; cursor: pointer; }
-.block-wrapper[data-type="todo"].checked > .block-main > .todo-checkbox { background: var(--accent); border-color: var(--accent); }
-.block-wrapper[data-type="todo"].checked > .block-main > .block-content { text-decoration: line-through; color: var(--text-muted); }
-.toggle-icon { width: 20px; cursor: pointer; margin-right: 4px; margin-top: 5px; transition: 0.2s; display: flex; justify-content: center; }
-.block-wrapper[data-type="toggle"].open > .block-main > .toggle-icon { transform: rotate(90deg); }
-.block-wrapper[data-type="toggle"]:not(.open) > .block-children { display: none; }
-.block-wrapper[data-type="toggle"].open > .block-children { display: block; animation: slideDown 0.15s ease-out; }
-
-
-/* ================= フローティングメニューとカラーパレット ================= */
-#floating-menu { 
-    position: absolute; background: #222; padding: 4px 8px; border-radius: 6px; 
-    display: flex; gap: 4px; z-index: 3000; box-shadow: 0 4px 12px rgba(0,0,0,0.3); 
-    align-items: center;
-}
-#floating-menu button { 
-    background: none; border: none; color: white; width: 28px; height: 28px; 
-    cursor: pointer; font-size: 14px; border-radius: 4px; font-weight: bold; 
-    display: flex; align-items: center; justify-content: center; transition: 0.1s;
-}
-#floating-menu button:hover { background: #444; }
-
-.color-picker-wrapper { position: relative; display: inline-block; }
-.color-picker-wrapper button small { font-size: 8px; margin-left: 2px; color: #aaa; }
-.color-palette { 
-    display: none; position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%); 
-    background: #222; padding: 6px; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-    width: 120px; flex-wrap: wrap; gap: 4px; z-index: 3100;
-}
-.color-palette::after { content: ''; position: absolute; top: 100%; left: 0; width: 100%; height: 12px; }
-.color-picker-wrapper:hover .color-palette { display: flex; animation: fadeIn 0.1s ease-out; }
-.color-palette button { width: 24px !important; height: 24px !important; border-radius: 50% !important; font-size: 16px !important; margin: 2px; border: 1px solid #444 !important; }
-
-/* ================= モーダル群共通 ================= */
-#overlay, #search-overlay, #link-overlay, #ext-link-overlay, #settings-overlay { position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.5); backdrop-filter: blur(2px); display: flex; align-items: center; justify-content: center; z-index: 2000; }
-.modal { background: var(--bg-main); padding: 24px; border-radius: 8px; box-shadow: 0 4px 24px rgba(0,0,0,0.2); border: 1px solid var(--border); width: 320px; text-align: center; }
-.modal input, .modal select { width: 100%; padding: 8px; margin: 12px 0; border: 1px solid var(--border); border-radius: 4px; outline: none; background: transparent; color: var(--text-main); font-family: inherit; }
-.primary-btn { width: 100%; padding: 8px; border: none; border-radius: 4px; cursor: pointer; margin-top: 8px; font-weight: 500; background: var(--text-main); color: var(--bg-main); transition: 0.2s; }
-.primary-btn:hover { opacity: 0.9; }
-.cancel-btn { width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: 4px; cursor: pointer; margin-top: 8px; background: transparent; color: var(--text-muted); transition: 0.2s; }
-.cancel-btn:hover { background: var(--bg-hover); color: var(--text-main); }
-
-/* 検索モーダル */
-.search-modal { width: 500px !important; }
-.search-results { max-height: 300px; overflow-y: auto; margin-top: 12px; text-align: left; }
-.search-item { padding: 8px 12px; cursor: pointer; border-bottom: 1px solid var(--border); transition: 0.2s; }
-.search-item:hover { background: var(--bg-hover); }
-
-/* スラッシュメニュー */
-#slash-menu { position: absolute; background: var(--bg-main); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); width: 200px; z-index: 1000; padding: 6px 0; }
-.slash-item { padding: 6px 12px; cursor: pointer; text-align:left; }
-.slash-item.selected, .slash-item:hover { background: var(--bg-hover); }
-
-/* コンテキストメニュー */
-#context-menu { position: absolute; background: var(--bg-main); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); width: 160px; z-index: 3000; padding: 4px 0; font-size: 14px; }
-.menu-item { padding: 8px 16px; cursor: pointer; transition: 0.1s; }
-.menu-item:hover { background: var(--bg-hover); }
-.menu-item.delete { color: #d93025; }
-
-/* 設定画面等 */
-.settings-modal { background: var(--bg-main); width: 600px; height: 400px; border-radius: 8px; box-shadow: 0 4px 24px rgba(0,0,0,0.2); border: 1px solid var(--border); display: flex; position: relative; overflow: hidden; }
-.settings-sidebar { width: 200px; background: var(--bg-sidebar); border-right: 1px solid var(--border); padding: 24px 0; flex-shrink: 0; }
-.settings-tab { padding: 12px 24px; cursor: pointer; color: var(--text-muted); font-size: 14px; font-weight: 500; transition: 0.2s; }
-.settings-tab.active, .settings-tab:hover { background: var(--bg-hover); color: var(--text-main); }
-.settings-content { flex: 1; padding: 32px; overflow-y: auto; text-align:left; }
-
-.close-icon-btn { position: absolute; top: 12px; right: 12px; background: var(--bg-hover); border: none; font-size: 20px; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--text-muted); cursor: pointer; line-height: 1; z-index: 100; transition: 0.2s; }
-.close-icon-btn:hover { background: #d93025; color: white; }
-
-.danger-btn { background: #d93025; color: white; border:none; padding:8px; border-radius:4px; width:100%; cursor:pointer; font-family: inherit; transition: 0.2s; }
-.danger-btn:hover { background: #b3261e; }
-.mobile-topbar { display: none; }
-
-@media (max-width: 768px) { 
-    #sidebar { display: none; } 
-    .mobile-topbar { display: flex; } 
-    .settings-modal { flex-direction: column; width: 90%; height: 80vh; }
-    .settings-sidebar { width: 100%; height: auto; border-right: none; border-bottom: 1px solid var(--border); display: flex; padding: 0; overflow-x: auto; }
-    .settings-tab { white-space: nowrap; }
+        await loadDataFromAppwrite();
+        renderTree();
+        openPage('home');
+        calcStorageUsage();
+    } catch (err) {
+        showAuthModal();
+    }
 }
 
-/* タイトル行のプレースホルダー表示 */
-.page-title-input:empty:before {
-    content: attr(data-placeholder);
-    color: var(--text-muted, #9a9a97);
-    pointer-events: none;
+document.getElementById('setting-image-quality')?.addEventListener('change', (e) => {
+    localStorage.setItem('motion_image_quality', e.target.value);
+});
+
+document.querySelector('.settings-tab[data-tab="account"]')?.addEventListener('click', () => {
+    calcStorageUsage();
+});
+
+function calcStorageUsage() {
+    let totalBytes = 0;
+    Object.values(state.pages).forEach(page => {
+        const blocksData = page.blocks || [];
+        const pageString = typeof blocksData === 'string' ? blocksData : JSON.stringify(blocksData);
+        totalBytes += new Blob([pageString]).size;
+    });
+
+    const usageText = document.getElementById('storage-usage-text');
+    if (!usageText) return;
+
+    if (totalBytes < 1024) {
+        usageText.textContent = `テキストデータ使用量: ${totalBytes} Bytes`;
+    } else if (totalBytes < 1024 * 1024) {
+        usageText.textContent = `テキストデータ使用量: ${(totalBytes / 1024).toFixed(2)} KB`;
+    } else {
+        usageText.textContent = `テキストデータ使用量: ${(totalBytes / (1024 * 1024)).toFixed(2)} MB`;
+    }
 }
+
+const usernameToEmail = (username) => `${username.toLowerCase()}@motion.local`;
+
+function showAuthModal() {
+    const authOverlay = document.getElementById('auth-overlay');
+    authOverlay.classList.remove('hidden');
+    let isSignUp = false;
+
+    const authSubmit = document.getElementById('auth-submit-btn');
+    const authToggle = document.getElementById('auth-toggle-btn');
+
+    authToggle.onclick = () => {
+        isSignUp = !isSignUp;
+        document.getElementById('auth-title').textContent = isSignUp ? 'アカウント作成' : 'ログイン';
+        authSubmit.textContent = isSignUp ? '作成してログイン' : 'ログイン';
+        authToggle.textContent = isSignUp ? 'ログインへ切替' : 'アカウント作成へ切替';
+    };
+
+    authSubmit.onclick = async () => {
+        const username = document.getElementById('auth-username').value.trim();
+        const pass = document.getElementById('auth-password').value.trim();
+        const email = usernameToEmail(username);
+
+        if (!username || !pass) return alert('ユーザー名とパスワードを入力してください');
+
+        try {
+            if (isSignUp) {
+                await account.create(ID.unique(), email, pass, username);
+            }
+            await account.createEmailSession(email, pass);
+            authOverlay.classList.add('hidden');
+            location.reload();
+        } catch (e) {
+            alert(`エラー: ${e.message}`);
+        }
+    };
+}
+
+document.getElementById('btn-change-pass')?.addEventListener('click', async () => {
+    const oldPass = document.getElementById('change-pass-old').value;
+    const newPass = document.getElementById('change-pass-new').value;
+    if (!oldPass || !newPass) return alert('旧パスワードと新パスワードを入力してください');
+
+    try {
+        await account.updatePassword(newPass, oldPass);
+        alert('パスワードを変更しました。');
+        document.getElementById('change-pass-old').value = '';
+        document.getElementById('change-pass-new').value = '';
+    } catch (e) {
+        alert(`変更失敗: ${e.message}`);
+    }
+});
+
+document.getElementById('btn-logout')?.addEventListener('click', async () => {
+    await account.deleteSession('current');
+    location.reload();
+});
+
+// ================= Appwrite データ同期 =================
+async function loadDataFromAppwrite() {
+    try {
+        const response = await databases.listDocuments(DB_ID, COLLECTION_PAGES);
+
+        state.pages = {};
+        state.rootPages = [];
+
+        const pageMap = {};
+        for (const doc of response.documents) {
+            if (!pageMap[doc.pageId]) {
+                pageMap[doc.pageId] = doc;
+            } else {
+                try {
+                    await databases.deleteDocument(DB_ID, COLLECTION_PAGES, doc.$id);
+                } catch (e) {}
+            }
+        }
+
+        Object.values(pageMap).forEach(doc => {
+            let parsedBlocks = doc.blocks;
+            if (typeof parsedBlocks === 'string') {
+                try { parsedBlocks = JSON.parse(parsedBlocks); } catch (err) { parsedBlocks = []; }
+            }
+            if (!Array.isArray(parsedBlocks)) {
+                parsedBlocks = [{ id: generateId(), type: 'p', content: '', children: [] }];
+            }
+
+            state.pages[doc.pageId] = {
+                id: doc.pageId,
+                title: doc.title || '',
+                parentId: doc.parentId || null,
+                blocks: parsedBlocks,
+                isLocked: doc.isLocked || false,
+                $id: doc.$id
+            };
+            if (!doc.parentId) state.rootPages.push(doc.pageId);
+        });
+
+        if (Object.keys(state.pages).length === 0) {
+            const id = generateId();
+            const initialPage = { 
+                id, 
+                title: 'はじめに', 
+                parentId: null, 
+                blocks: [{ id: generateId(), type: 'p', content: 'Welcome to Motion!', children: [] }], 
+                isLocked: false 
+            };
+            state.pages[id] = initialPage;
+            state.rootPages.push(id);
+            await createPageInAppwrite(initialPage);
+        }
+    } catch (e) {
+        console.error('Data load error:', e);
+    }
+}
+
+async function createPageInAppwrite(page) {
+    if (!currentUser) return;
+    const payload = {
+        pageId: page.id,
+        title: page.title || '',
+        parentId: page.parentId || null,
+        blocks: JSON.stringify(page.blocks),
+        isLocked: page.isLocked || false
+    };
+    const permissions = [
+        Permission.read(Role.any()),
+        Permission.write(Role.user(currentUser.$id))
+    ];
+
+    try {
+        const doc = await databases.createDocument(DB_ID, COLLECTION_PAGES, ID.unique(), payload, permissions);
+        page.$id = doc.$id;
+    } catch (e) {
+        console.error('Create page error:', e);
+    }
+}
+
+async function saveDataToAppwrite(pageTarget) {
+    if (!currentUser) return;
+    const page = pageTarget || state.pages[state.currentPageId];
+    if (!page || page.id === 'home') return;
+
+    if (!page.$id) {
+        await createPageInAppwrite(page);
+        return;
+    }
+
+    const payload = {
+        pageId: page.id,
+        title: page.title || '',
+        parentId: page.parentId || null,
+        blocks: JSON.stringify(page.blocks),
+        isLocked: page.isLocked || false
+    };
+
+    try {
+        await databases.updateDocument(DB_ID, COLLECTION_PAGES, page.$id, payload);
+    } catch (e) {
+        console.error('Update error:', e);
+    }
+}
+
+async function saveData() {
+    if (state.currentPageId && state.currentPageId !== 'home') {
+        await saveDataToAppwrite(state.pages[state.currentPageId]);
+    }
+    const uiState = {
+        expandedNodes: state.expandedNodes,
+        recentPages: state.recentPages
+    };
+    localStorage.setItem('motion_ui_state', JSON.stringify(uiState));
+}
+
+(async () => {
+    await initApp();
+})();
+
+function isPageLocked(pageId) {
+    let currentId = pageId;
+    while(currentId) {
+        const p = state.pages[currentId];
+        if(!p) break;
+        if(p.isLocked) return p;
+        currentId = p.parentId;
+    }
+    return null;
+}
+
+function applyTheme() {
+    const theme = localStorage.getItem('local_workspace_theme') || 'light';
+    document.body.classList.toggle('dark-mode', theme === 'dark');
+    document.querySelectorAll('input[name="theme"]').forEach(r => r.checked = (r.value === theme));
+}
+
+// ================= Undo / Redo =================
+function pushHistory(pageId) {
+    if (!historyStack[pageId]) { historyStack[pageId] = []; historyIndex[pageId] = -1; }
+    const currentBlocks = clone(state.pages[pageId].blocks);
+    
+    if(historyIndex[pageId] >= 0) {
+        const lastBlocks = historyStack[pageId][historyIndex[pageId]];
+        if(JSON.stringify(currentBlocks) === JSON.stringify(lastBlocks)) return;
+    }
+    historyStack[pageId] = historyStack[pageId].slice(0, historyIndex[pageId] + 1);
+    historyStack[pageId].push(currentBlocks);
+    if(historyStack[pageId].length > 50) historyStack[pageId].shift();
+    else historyIndex[pageId]++;
+}
+function executeUndo(pageId) {
+    if (!historyStack[pageId] || historyIndex[pageId] <= 0) return;
+    historyIndex[pageId]--;
+    state.pages[pageId].blocks = clone(historyStack[pageId][historyIndex[pageId]]);
+    renderEditor(state.pages[pageId]); saveData();
+}
+function executeRedo(pageId) {
+    if (!historyStack[pageId] || historyIndex[pageId] >= historyStack[pageId].length - 1) return;
+    historyIndex[pageId]++;
+    state.pages[pageId].blocks = clone(historyStack[pageId][historyIndex[pageId]]);
+    renderEditor(state.pages[pageId]); saveData();
+}
+
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        document.getElementById('search-overlay')?.classList.add('hidden');
+        document.getElementById('floating-menu')?.classList.add('hidden');
+        document.getElementById('overlay')?.classList.add('hidden');
+        document.getElementById('link-overlay')?.classList.add('hidden');
+        document.getElementById('ext-link-overlay')?.classList.add('hidden');
+        document.getElementById('settings-overlay')?.classList.add('hidden');
+        closeSlashMenu();
+        document.getElementById('context-menu')?.classList.add('hidden');
+        return;
+    }
+
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+        e.preventDefault();
+        if (e.shiftKey) executeRedo(state.currentPageId);
+        else executeUndo(state.currentPageId);
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+        if (e.target.tagName === 'INPUT') return;
+        e.preventDefault(); executeRedo(state.currentPageId);
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p') {
+        e.preventDefault(); openSearchModal();
+    }
+});
+
+// ================= サイドバー・ツリー描画 =================
+const sidebar = document.getElementById('sidebar'), sidebarOverlay = document.getElementById('sidebar-overlay'), treeEl = document.getElementById('tree'), editorEl = document.getElementById('editor'), pageTitleEl = document.getElementById('page-title');
+let contextMenuTargetId = null;
+const contextMenuEl = document.getElementById('context-menu');
+
+function renderTree() {
+    if(!treeEl) return;
+    treeEl.innerHTML = '';
+    const buildTree = (pageIds, container, level) => {
+        pageIds.forEach(id => {
+            const page = state.pages[id]; if (!page) return;
+            const children = Object.values(state.pages).filter(p => p.parentId === id).map(p => p.id);
+            const item = document.createElement('div');
+            item.className = `tree-item ${state.currentPageId === id ? 'active' : ''}`;
+            item.style.paddingLeft = `${16 + level * 16}px`;
+            
+            const isExpanded = state.expandedNodes.includes(id);
+            const toggle = document.createElement('div'); toggle.className = 'tree-toggle';
+            toggle.innerHTML = children.length > 0 ? (isExpanded ? '▼' : '▶') : '•';
+            
+            const title = document.createElement('div'); title.className = 'tree-title';
+            title.textContent = page.title || '無題';
+            item.append(toggle, title);
+            
+            item.onclick = (e) => {
+                if(e.target === toggle && children.length > 0) {
+                    const isHidden = childContainer.classList.contains('hidden');
+                    if (isHidden) {
+                        const lockedBy = isPageLocked(id);
+                        if (lockedBy && !lockedBy.isUnlockedSession) {
+                            e.stopPropagation();
+                            showPasswordModal(lockedBy.id, () => {
+                                if (!state.expandedNodes.includes(id)) state.expandedNodes.push(id);
+                                saveData(); renderTree();
+                            });
+                            return;
+                        }
+                        childContainer.classList.remove('hidden'); toggle.innerHTML = '▼';
+                        if (!state.expandedNodes.includes(id)) state.expandedNodes.push(id);
+                    } else {
+                        childContainer.classList.add('hidden'); toggle.innerHTML = '▶';
+                        state.expandedNodes = state.expandedNodes.filter(n => n !== id);
+                    }
+                    saveData(); e.stopPropagation(); return;
+                }
+                openPage(id);
+            };
+            item.oncontextmenu = (e) => {
+                e.preventDefault(); e.stopPropagation(); contextMenuTargetId = id;
+                contextMenuEl.style.top = `${e.pageY}px`; contextMenuEl.style.left = `${e.pageX}px`; contextMenuEl.classList.remove('hidden');
+            };
+            container.appendChild(item);
+
+            const childContainer = document.createElement('div');
+            childContainer.className = `tree-children ${isExpanded ? '' : 'hidden'}`;
+            if (children.length > 0) buildTree(children, childContainer, level + 1);
+            container.appendChild(childContainer);
+        });
+    };
+    buildTree(state.rootPages, treeEl, 0);
+    document.getElementById('btn-home').classList.toggle('active', state.currentPageId === 'home');
+}
+
+document.getElementById('sidebar-toggle-btn').addEventListener('click', () => { sidebar.classList.add('open'); sidebarOverlay.classList.add('active'); });
+sidebarOverlay.addEventListener('click', () => { sidebar.classList.remove('open'); sidebarOverlay.classList.remove('active'); });
+
+document.getElementById('add-page-btn').addEventListener('click', async () => {
+    const id = generateId(); 
+    const newPage = { 
+        id, 
+        title: '', 
+        parentId: null, 
+        blocks: [{ id: generateId(), type: 'p', content: '', children: [] }] 
+    };
+    state.pages[id] = newPage;
+    state.rootPages.push(id); 
+    await createPageInAppwrite(newPage);
+    saveData(); 
+    renderTree(); 
+    openPage(id); 
+    setTimeout(() => pageTitleEl.focus(), 10);
+});
+
+document.getElementById('ctx-add-subpage')?.addEventListener('click', async () => {
+    const childId = generateId();
+    const childPage = { 
+        id: childId, 
+        title: '', 
+        parentId: contextMenuTargetId, 
+        blocks: [{ id: generateId(), type: 'p', content: '', children: [] }] 
+    };
+    state.pages[childId] = childPage;
+    if(!state.expandedNodes.includes(contextMenuTargetId)) state.expandedNodes.push(contextMenuTargetId);
+    await createPageInAppwrite(childPage);
+    saveData(); 
+    renderTree(); 
+    openPage(childId); 
+    setTimeout(() => pageTitleEl?.focus(), 10);
+});
+
+document.getElementById('ctx-delete-page')?.addEventListener('click', () => {
+    contextMenuEl?.classList.add('hidden');
+    if(confirm("このページと中のコンテンツを全て削除しますか？")) {
+        const deleteRecursive = async (id) => {
+            const children = Object.values(state.pages).filter(p => p.parentId === id);
+            for (const child of children) {
+                await deleteRecursive(child.id);
+            }
+            const page = state.pages[id];
+            if (page && page.$id) {
+                try {
+                    await databases.deleteDocument(DB_ID, COLLECTION_PAGES, page.$id);
+                } catch (err) {
+                    console.error('Server delete error:', err);
+                }
+            }
+            delete state.pages[id]; 
+            state.rootPages = state.rootPages.filter(rid => rid !== id);
+            state.expandedNodes = state.expandedNodes.filter(rid => rid !== id);
+            state.recentPages = state.recentPages.filter(rid => rid !== id);
+        };
+        (async () => {
+            await deleteRecursive(contextMenuTargetId);
+            await saveData(); 
+            if(state.currentPageId === contextMenuTargetId) openPage('home');
+            else renderTree();
+        })();
+    }
+});
+document.addEventListener('click', (e) => { if (!e.target.closest('#context-menu')) contextMenuEl?.classList.add('hidden'); });
+
+function updateBreadcrumb(pageId) {
+    const breadcrumbEl = document.getElementById('breadcrumb');
+    if (pageId === 'home') { breadcrumbEl.innerHTML = ''; return; }
+    
+    let path = [], currentId = pageId;
+    while (currentId) { const p = state.pages[currentId]; if (!p) break; path.unshift(p); currentId = p.parentId; }
+    breadcrumbEl.innerHTML = '';
+    path.forEach((p, i) => {
+        const span = document.createElement('span'); span.className = 'breadcrumb-item'; span.textContent = p.title || '無題'; span.onclick = () => openPage(p.id);
+        breadcrumbEl.appendChild(span);
+        if (i < path.length - 1) { const sep = document.createElement('span'); sep.className = 'breadcrumb-separator'; sep.textContent = '/'; breadcrumbEl.appendChild(sep); }
+    });
+}
+
+function trackRecentPage(id) {
+    if (!state.recentPages) state.recentPages = [];
+    state.recentPages = state.recentPages.filter(pid => pid !== id);
+    state.recentPages.unshift(id);
+    if(state.recentPages.length > 12) state.recentPages.pop();
+    saveData();
+}
+
+function renderHome() {
+    const container = document.getElementById('home-recent-pages');
+    container.innerHTML = '';
+    const showLocked = localStorage.getItem('motion_show_locked_in_home') === 'true';
+    
+    let displayPages = [];
+    if (state.recentPages) {
+        state.recentPages.forEach(pid => {
+            if (state.pages[pid]) {
+                const lockedBy = isPageLocked(pid);
+                if (lockedBy && !showLocked) return;
+                displayPages.push(state.pages[pid]);
+            }
+        });
+    }
+
+    if (displayPages.length === 0) {
+        container.innerHTML = '<div style="color:var(--text-muted); font-size:14px;">履歴はありません</div>';
+        return;
+    }
+
+    displayPages.forEach(p => {
+        const card = document.createElement('div');
+        card.className = 'recent-page-card';
+        card.innerHTML = `<svg class="icon"><use href="#icon-page"></use></svg> <span>${p.title || '無題'}</span>`;
+        if (p.isLocked) {
+            card.innerHTML += `<svg class="icon" style="margin-left:auto; width:14px; height:14px;"><use href="#icon-lock"></use></svg>`;
+        }
+        card.onclick = () => openPage(p.id);
+        container.appendChild(card);
+    });
+}
+
+document.getElementById('btn-home').addEventListener('click', () => openPage('home'));
+
+function openPage(id) {
+    if (id === 'home') {
+        state.currentPageId = 'home';
+        document.getElementById('editor-wrapper').classList.add('hidden');
+        document.getElementById('empty-state').classList.add('hidden');
+        document.getElementById('home-wrapper').classList.remove('hidden');
+        document.getElementById('mobile-topbar-title').textContent = 'Motion';
+        renderTree(); renderHome(); updateBreadcrumb('home');
+        if (window.innerWidth <= 768) { sidebar.classList.remove('open'); sidebarOverlay.classList.remove('active'); }
+        return;
+    }
+
+    const lockedBy = isPageLocked(id);
+    if (lockedBy && !lockedBy.isUnlockedSession) { showPasswordModal(lockedBy.id, () => openPage(id)); return; }
+    
+    trackRecentPage(id);
+    state.currentPageId = id; renderTree(); updateBreadcrumb(id);
+    
+    document.getElementById('empty-state').classList.add('hidden'); 
+    document.getElementById('home-wrapper').classList.add('hidden');
+    document.getElementById('editor-wrapper').classList.remove('hidden');
+    
+    const page = state.pages[id];
+    pageTitleEl.textContent = page.title || '';
+    document.getElementById('mobile-topbar-title').textContent = page.title || '無題';
+    
+    const lockBtn = document.getElementById('lock-btn');
+    if (page.isLocked) { lockBtn.classList.add('locked'); document.getElementById('lock-text').textContent = 'ロックを解除'; }
+    else { lockBtn.classList.remove('locked'); document.getElementById('lock-text').textContent = 'ロック'; }
+    
+    if(!historyStack[id]) pushHistory(id);
+    renderEditor(page);
+    if (window.innerWidth <= 768) { sidebar.classList.remove('open'); sidebarOverlay.classList.remove('active'); }
+}
+
+let titleDebounceTimer = null;
+pageTitleEl.addEventListener('input', (e) => {
+    const val = e.target.textContent;
+    state.pages[state.currentPageId].title = val; 
+    document.getElementById('mobile-topbar-title').textContent = val || '無題';
+    renderTree(); 
+    updateBreadcrumb(state.currentPageId);
+    document.querySelectorAll(`.block-content[data-link-id="${state.currentPageId}"]`).forEach(el => el.innerHTML = `📄 ${val || '無題'}`);
+
+    clearTimeout(titleDebounceTimer);
+    titleDebounceTimer = setTimeout(async () => {
+        await saveData();
+    }, 200);
+});
+
+// タイトル行でEnterを押したら本文（最初のブロック）にフォーカスする処理
+pageTitleEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { 
+        e.preventDefault(); 
+        const firstBlock = document.querySelector('#editor .block-content'); 
+        if (firstBlock) {
+            firstBlock.focus();
+            if (firstBlock.contentEditable === "true") {
+                setCaretPosition(firstBlock, 0);
+            }
+        }
+    }
+});
+
+const overlayIds = ['overlay', 'search-overlay', 'link-overlay', 'ext-link-overlay', 'settings-overlay'];
+overlayIds.forEach(id => {
+    document.getElementById(id)?.addEventListener('click', e => {
+        if (e.target.id === id) {
+            if (id === 'overlay') document.getElementById('modal-cancel')?.click();
+            else if (id === 'link-overlay') document.getElementById('link-cancel')?.click();
+            else if (id === 'ext-link-overlay') document.getElementById('ext-link-cancel')?.click();
+            else if (id === 'settings-overlay') document.getElementById('settings-close')?.click();
+            else e.target.classList.add('hidden');
+        }
+    });
+});
+
+function showPasswordModal(lockParentId, onSuccess) {
+    const overlay = document.getElementById('overlay'), modalPass = document.getElementById('modal-pass');
+    overlay.classList.remove('hidden'); modalPass.value = ''; modalPass.focus();
+    
+    document.getElementById('modal-submit').onclick = () => {
+        const pass = modalPass.value; const parentPage = state.pages[lockParentId];
+        parentPage.password = pass; parentPage.isUnlockedSession = true;
+        overlay.classList.add('hidden'); if(onSuccess) onSuccess();
+    };
+}
+document.getElementById('modal-cancel')?.addEventListener('click', () => document.getElementById('overlay').classList.add('hidden'));
+document.getElementById('lock-btn')?.addEventListener('click', () => {
+    const page = state.pages[state.currentPageId];
+    if (page.isLocked) {
+        if(confirm("パスワード保護を解除しますか？")) {
+            page.isLocked = false; page.password = null; page.isUnlockedSession = false;
+            saveEditorState(true); openPage(state.currentPageId);
+        }
+    } else {
+        const pass = prompt("このページをロックするためのパスワードを入力してください:");
+        if (pass) {
+            page.isLocked = true; page.password = pass; page.isUnlockedSession = false;
+            saveEditorState(true); 
+            const currentId = state.currentPageId; state.currentPageId = null;
+            document.getElementById('editor-wrapper').classList.add('hidden'); document.getElementById('empty-state').classList.remove('hidden');
+            state.expandedNodes = state.expandedNodes.filter(id => !isPageLocked(id));
+            saveData().then(() => { renderTree(); openPage(currentId); });
+        }
+    }
+});
+
+// ================= エディタ描画と保存 =================
+function renderEditor(page) {
+    editorEl.innerHTML = ''; 
+    let blocks = page.blocks;
+    if (!blocks || !Array.isArray(blocks) || blocks.length === 0) {
+        blocks = [{ id: generateId(), type: 'p', content: '', children: [] }];
+        page.blocks = blocks;
+    }
+    renderBlocks(blocks, editorEl); 
+    reinitSortables();
+}
+
+function renderBlocks(blockArray, container) {
+    blockArray.forEach(blockData => {
+        const wrapper = document.createElement('div'); 
+        wrapper.className = 'block-wrapper'; 
+        wrapper.dataset.id = blockData.id; 
+        wrapper.dataset.type = blockData.type || 'p';
+        if(blockData.checked) wrapper.classList.add('checked'); 
+        if(blockData.toggleOpen) wrapper.classList.add('open');
+
+        const main = document.createElement('div'); 
+        main.className = 'block-main';
+        main.innerHTML = `<div class="drag-handle"><svg class="icon"><use href="#icon-grip"></use></svg></div>`;
+        
+        if (blockData.type === 'todo') { 
+            const cb = document.createElement('div'); 
+            cb.className = 'todo-checkbox'; 
+            cb.onclick = () => { wrapper.classList.toggle('checked'); saveEditorState(true); }; 
+            main.appendChild(cb); 
+        }
+        if (blockData.type === 'toggle') { 
+            const tg = document.createElement('div'); 
+            tg.className = 'toggle-icon'; 
+            tg.innerHTML = '<svg class="icon"><use href="#icon-toggle"></use></svg>'; 
+            tg.onclick = () => { wrapper.classList.toggle('open'); saveEditorState(true); }; 
+            main.appendChild(tg); 
+        }
+
+        const content = document.createElement('div'); 
+        content.className = 'block-content'; 
+        content.dataset.placeholder = "'/' または MarkDown記法 (#, [], >)";
+        
+        if (blockData.type === 'page_link') {
+            content.contentEditable = "false"; 
+            content.tabIndex = 0; 
+            content.dataset.linkId = blockData.content;
+            const target = state.pages[blockData.content];
+            content.innerHTML = target ? `📄 ${target.title || '無題'}` : `📄 削除されたページ`;
+            if(target) content.onclick = () => openPage(blockData.content);
+            content.addEventListener('keydown', handleNonTextKeydown);
+        } else if (blockData.type === 'image') {
+            content.contentEditable = "false"; 
+            content.tabIndex = 0;
+            content.innerHTML = `<img src="${blockData.content}" alt="画像">`;
+            content.addEventListener('keydown', handleNonTextKeydown);
+        } else {
+            content.contentEditable = "true"; 
+            content.innerHTML = blockData.content || '';
+            content.addEventListener('keydown', handleBlockKeydown); 
+            content.addEventListener('input', handleBlockInput); 
+            content.addEventListener('paste', handleBlockPaste);
+        }
+        main.appendChild(content); 
+        wrapper.appendChild(main);
+        
+        const childrenContainer = document.createElement('div'); 
+        childrenContainer.className = 'block-children';
+        if (blockData.children && Array.isArray(blockData.children) && blockData.children.length > 0) {
+            renderBlocks(blockData.children, childrenContainer);
+        }
+        wrapper.appendChild(childrenContainer); 
+        container.appendChild(wrapper);
+    });
+}
+
+// 非テキスト（画像やページリンク）ブロックでのキーボード操作ハンドラ（上下移動の確実化）
+function handleNonTextKeydown(e) {
+    const wrapper = e.target.closest('.block-wrapper');
+    if (e.key === 'Backspace' || e.key === 'Delete') { 
+        e.preventDefault(); 
+        const prev = wrapper.previousElementSibling; 
+        wrapper.remove(); 
+        saveEditorState(true); 
+        if (prev) { 
+            const pc = prev.querySelector('.block-content'); 
+            if (pc) { 
+                pc.focus(); 
+                if (pc.contentEditable === "true") setCaretPosition(pc, pc.textContent.length); 
+            } 
+        }
+    } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+        e.preventDefault(); 
+        const prev = wrapper.previousElementSibling;
+        if (prev && prev.classList.contains('block-wrapper')) { 
+            const pc = prev.querySelector('.block-content'); 
+            if (pc) {
+                pc.focus(); 
+                if (pc.contentEditable === "true") setCaretPosition(pc, pc.textContent.length); 
+            }
+        } else {
+            // 最上部ならタイトルへ戻る
+            pageTitleEl.focus();
+        }
+    } else if (e.key === 'ArrowDown' || e.key === 'ArrowRight' || e.key === 'Enter') {
+        e.preventDefault(); 
+        const next = wrapper.nextElementSibling;
+        if (next && next.classList.contains('block-wrapper')) { 
+            const nc = next.querySelector('.block-content'); 
+            if (nc) {
+                nc.focus(); 
+                if (nc.contentEditable === "true") setCaretPosition(nc, 0); 
+            }
+        } else if (e.key === 'Enter') {
+            // 画像などの下でEnterを押したら新しい段落を作る
+            const newBlockWrapper = document.createElement('div');
+            const newId = generateId();
+            renderBlocks([{ id: newId, type: 'p', content: '', children: [] }], newBlockWrapper);
+            wrapper.after(newBlockWrapper.firstElementChild);
+            const nc = wrapper.nextElementSibling.querySelector('.block-content');
+            if (nc) nc.focus();
+            saveEditorState(true);
+            reinitSortables();
+        }
+    }
+}
+
+function reinitSortables() {
+    sortableInstances.forEach(s => s.destroy()); sortableInstances = [];
+    const initS = (el) => sortableInstances.push(new Sortable(el, { group: 'shared', handle: '.drag-handle', animation: 150, fallbackOnBody: true, onEnd: () => saveEditorState(true) }));
+    if(editorEl) initS(editorEl); document.querySelectorAll('#editor .block-children').forEach(el => initS(el));
+}
+
+function extractBlocks(container) {
+    if(!container) return [];
+    return Array.from(container.children).filter(el => el.classList.contains('block-wrapper')).map(wrapper => {
+        const type = wrapper.dataset.type, contentEl = wrapper.querySelector(':scope > .block-main > .block-content');
+        let content = '';
+        if (type === 'page_link') content = contentEl.dataset.linkId;
+        else if (type === 'image') content = contentEl.querySelector('img').src;
+        else if (contentEl) {
+            content = DOMPurify.sanitize(contentEl.innerHTML, { ALLOWED_TAGS: ['a','br','b','strong','i','em','u','s','strike','span'], ALLOWED_ATTR: ['href','target','rel','style','class'] });
+        }
+        return { 
+            id: wrapper.dataset.id, 
+            type, 
+            content, 
+            checked: wrapper.classList.contains('checked'), 
+            toggleOpen: wrapper.classList.contains('open'), 
+            children: extractBlocks(wrapper.querySelector(':scope > .block-children')) 
+        };
+    });
+}
+
+let saveDebounceTimer = null;
+function saveEditorState(isStructuralChange = false) {
+    if (!state.currentPageId || !editorEl) return;
+    const page = state.pages[state.currentPageId];
+    const executeSave = async () => {
+        page.blocks = extractBlocks(editorEl);
+        if(isStructuralChange) pushHistory(state.currentPageId);
+        await saveData();
+    };
+    if (isStructuralChange) { clearTimeout(saveDebounceTimer); executeSave(); }
+    else { 
+        clearTimeout(saveDebounceTimer); 
+        saveDebounceTimer = setTimeout(executeSave, 200); 
+    }
+}
+
+function getCaretOffset(element) {
+    const sel = window.getSelection(); if (sel.rangeCount === 0) return 0;
+    const range = sel.getRangeAt(0); const preCaretRange = range.cloneRange();
+    preCaretRange.selectNodeContents(element); preCaretRange.setEnd(range.endContainer, range.endOffset);
+    return preCaretRange.toString().length;
+}
+function setCaretPosition(el, pos) {
+    const range = document.createRange(); const sel = window.getSelection();
+    let charIndex = 0, nodeStack = [el], node, found = false;
+    if(pos === 0) { range.setStart(el, 0); range.collapse(true); sel.removeAllRanges(); sel.addRange(range); return; }
+    while (!found && (node = nodeStack.pop())) {
+        if (node.nodeType === 3) {
+            const nextCharIndex = charIndex + node.length;
+            if (pos <= nextCharIndex) { range.setStart(node, pos - charIndex); found = true; }
+            charIndex = nextCharIndex;
+        } else {
+            let i = node.childNodes.length; while (i--) nodeStack.push(node.childNodes[i]);
+        }
+    }
+    range.collapse(true); sel.removeAllRanges(); sel.addRange(range);
+}
+function insertNodeAtCaret(node) {
+    const sel = window.getSelection(); if (!sel.rangeCount) return;
+    const range = sel.getRangeAt(0); range.deleteContents();
+    const lastNode = node.nodeType === 11 ? node.lastChild : node;
+    range.insertNode(node);
+    if (lastNode) { range.setStartAfter(lastNode); range.collapse(true); sel.removeAllRanges(); sel.addRange(range); }
+}
+function getVisibleContents() { 
+    return Array.from(document.querySelectorAll('#editor .block-content')).filter(el => el.getBoundingClientRect().height > 0); 
+}
+
+const slashMenuEl = document.getElementById('slash-menu');
+let slashQuery = null, slashTargetBlock = null;
+
+function handleBlockKeydown(e) {
+    if (e.isComposing) return;
+    
+    if (slashMenuEl && !slashMenuEl.classList.contains('hidden')) {
+        if (e.key === 'ArrowUp') { e.preventDefault(); navigateSlashMenu(-1); return; }
+        if (e.key === 'ArrowDown') { e.preventDefault(); navigateSlashMenu(1); return; }
+        if (e.key === 'Enter') { e.preventDefault(); const selected = slashMenuEl.querySelector('.selected'); if(selected) selected.click(); return; }
+    }
+
+    const contentEl = e.target; const wrapper = contentEl.closest('.block-wrapper');
+    const offset = getCaretOffset(contentEl); const textLen = contentEl.textContent.length;
+
+    if (e.key === 'Tab') {
+        e.preventDefault();
+        if (e.shiftKey) {
+            const parentChildren = wrapper.parentElement;
+            if (parentChildren.classList.contains('block-children')) {
+                parentChildren.closest('.block-wrapper').after(wrapper);
+                contentEl.focus(); saveEditorState(true); reinitSortables();
+            }
+        } else {
+            const prev = wrapper.previousElementSibling;
+            if (prev && prev.classList.contains('block-wrapper') && prev.dataset.type !== 'page_link' && prev.dataset.type !== 'image') {
+                prev.querySelector(':scope > .block-children').appendChild(wrapper);
+                if (prev.dataset.type === 'toggle') prev.classList.add('open');
+                contentEl.focus(); saveEditorState(true); reinitSortables();
+            }
+        }
+        return;
+    }
+
+    if (e.key === 'Enter') {
+        if (e.shiftKey) { e.preventDefault(); insertNodeAtCaret(document.createElement('br')); saveEditorState(); return; }
+        e.preventDefault();
+        
+        const range = window.getSelection().getRangeAt(0);
+        const preRange = document.createRange(); preRange.selectNodeContents(contentEl); preRange.setEnd(range.startContainer, range.startOffset);
+        const postRange = document.createRange(); postRange.selectNodeContents(contentEl); postRange.setStart(range.endContainer, range.endOffset);
+        
+        const div1 = document.createElement('div'); div1.appendChild(preRange.cloneContents());
+        const div2 = document.createElement('div'); div2.appendChild(postRange.cloneContents());
+        
+        contentEl.innerHTML = div1.innerHTML;
+        const tempContainer = document.createElement('div');
+        renderBlocks([{ id: generateId(), type: wrapper.dataset.type === 'todo' ? 'todo' : 'p', content: div2.innerHTML, children: [] }], tempContainer);
+        const newEl = tempContainer.firstElementChild;
+        
+        if (wrapper.dataset.type === 'toggle' && wrapper.classList.contains('open')) {
+            wrapper.querySelector(':scope > .block-children').prepend(newEl);
+        } else { wrapper.after(newEl); }
+        newEl.querySelector('.block-content').focus();
+        saveEditorState(true); reinitSortables();
+    } 
+    else if (e.key === 'Backspace' && offset === 0) {
+        e.preventDefault();
+        const allContents = getVisibleContents(); const idx = allContents.indexOf(contentEl);
+        if (idx > 0) {
+            const prevContent = allContents[idx - 1]; const prevWrapper = prevContent.closest('.block-wrapper');
+            if (prevWrapper.dataset.type !== 'page_link' && prevWrapper.dataset.type !== 'image') {
+                const prevLen = prevContent.textContent.length;
+                if (contentEl.innerHTML !== '') prevContent.innerHTML += contentEl.innerHTML; 
+                const myChildren = wrapper.querySelector(':scope > .block-children');
+                if (myChildren) while(myChildren.firstChild) wrapper.after(myChildren.firstChild);
+                wrapper.remove(); prevContent.focus(); setCaretPosition(prevContent, prevLen);
+                saveEditorState(true); closeSlashMenu();
+            } else { prevWrapper.remove(); saveEditorState(true); }
+        }
+    }
+    else if (e.key === 'Delete' && offset === textLen) {
+        e.preventDefault();
+        const allContents = getVisibleContents(); const idx = allContents.indexOf(contentEl);
+        if (idx < allContents.length - 1) {
+            const nextContent = allContents[idx + 1]; const nextWrapper = nextContent.closest('.block-wrapper');
+            if (nextWrapper.dataset.type !== 'page_link' && nextWrapper.dataset.type !== 'image') {
+                if (nextContent.innerHTML !== '') contentEl.innerHTML += nextContent.innerHTML;
+                const nextChildren = nextWrapper.querySelector(':scope > .block-children');
+                if (nextChildren) while(nextChildren.firstChild) nextWrapper.after(nextChildren.firstChild);
+                nextWrapper.remove(); setCaretPosition(contentEl, offset);
+                saveEditorState(true); closeSlashMenu();
+            } else { nextWrapper.remove(); saveEditorState(true); }
+        }
+    }
+    else if (e.key === 'ArrowUp') {
+        if (offset === 0 || contentEl.textContent === '') {
+            const allContents = getVisibleContents(); 
+            const idx = allContents.indexOf(contentEl);
+            if (idx > 0) {
+                e.preventDefault(); 
+                const prev = allContents[idx - 1]; 
+                prev.focus(); 
+                if (prev.contentEditable === "true") setCaretPosition(prev, prev.textContent.length);
+            } else if (idx === 0) {
+                e.preventDefault();
+                pageTitleEl.focus();
+            }
+        }
+    }
+    else if (e.key === 'ArrowDown') {
+        if (offset === textLen || contentEl.textContent === '') {
+            const allContents = getVisibleContents(); 
+            const idx = allContents.indexOf(contentEl);
+            if (idx < allContents.length - 1) {
+                e.preventDefault(); 
+                const next = allContents[idx + 1]; 
+                next.focus(); 
+                if (next.contentEditable === "true") setCaretPosition(next, 0);
+            }
+        }
+    }
+}
+
+function handleBlockPaste(e) {
+    const clipboardData = e.clipboardData || window.clipboardData;
+    const items = clipboardData.items;
+    
+    for (let i = 0; i < items.length; i++) {
+        if (items[i].type.indexOf('image') !== -1) {
+            e.preventDefault();
+            const file = items[i].getAsFile();
+            const wrapper = e.target.closest('.block-wrapper');
+            if (file && wrapper) {
+                uploadAndInsertImage(file, wrapper);
+            }
+            return;
+        }
+    }
+
+    e.preventDefault();
+    const pastedText = clipboardData.getData('text/plain');
+    const sel = window.getSelection();
+    const isUrl = /^https?:\/\//i.test(pastedText.trim());
+
+    if (!sel.isCollapsed && isUrl) {
+        const a = document.createElement('a');
+        a.href = pastedText.trim(); a.target = "_blank"; a.rel = "noopener noreferrer"; a.textContent = sel.toString();
+        insertNodeAtCaret(a);
+    } else {
+        document.execCommand('insertText', false, pastedText);
+    }
+    saveEditorState(true);
+}
+
+document.addEventListener('click', (e) => {
+    const a = e.target.closest('a');
+    if (a && a.href) window.open(a.href, '_blank', 'noopener,noreferrer');
+});
+
+// ================= スラッシュコマンド =================
+function handleBlockInput(e) {
+    const text = e.target.textContent; const wrapper = e.target.closest('.block-wrapper');
+    const mdMatch = text.match(/^(#{1,3}|\[\]|>)( |\u00A0)$/);
+    if (mdMatch && wrapper.dataset.type === 'p') {
+        let matchedType = null;
+        if (mdMatch[1] === '#') matchedType = 'h1'; else if (mdMatch[1] === '##') matchedType = 'h2'; else if (mdMatch[1] === '###') matchedType = 'h3';
+        else if (mdMatch[1] === '[]') matchedType = 'todo'; else if (mdMatch[1] === '>') matchedType = 'toggle';
+        
+        if (matchedType) {
+            const temp = document.createElement('div');
+            const extracted = { id: wrapper.dataset.id, type: matchedType, content: '', children: [] };
+            if (matchedType === 'toggle') { extracted.toggleOpen = true; extracted.children = [{id: generateId(), type: 'p', content: '', children: []}]; }
+            renderBlocks([extracted], temp);
+            const newEl = temp.firstElementChild;
+            wrapper.replaceWith(newEl); newEl.querySelector(':scope > .block-main > .block-content').focus();
+            saveEditorState(true); reinitSortables(); closeSlashMenu(); return;
+        }
+    }
+
+    const match = text.match(/(^|\s)\/([^\/]*)$/);
+    if (match) { slashQuery = match[2].toLowerCase(); slashTargetBlock = wrapper; showSlashMenu(e.target); }
+    else { closeSlashMenu(); }
+    saveEditorState(); 
+}
+
+function showSlashMenu(el) {
+    if(!slashMenuEl) return;
+    slashMenuEl.innerHTML = '';
+    const filtered = COMMANDS.filter(cmd => !slashQuery || cmd.keys.some(k => k.toLowerCase().includes(slashQuery)));
+    if (filtered.length === 0) { closeSlashMenu(); return; }
+    
+    filtered.forEach((cmd, i) => {
+        const div = document.createElement('div'); div.className = `slash-item ${i===0?'selected':''}`;
+        div.innerHTML = `<div style="font-weight:500;">${cmd.label}</div><div style="font-size:12px;color:gray;">${cmd.desc}</div>`;
+        div.onclick = () => executeCommand(cmd.id); slashMenuEl.appendChild(div);
+    });
+    const rect = el.getBoundingClientRect(); 
+    slashMenuEl.style.top = `${rect.bottom + window.scrollY}px`; slashMenuEl.style.left = `${rect.left + window.scrollX}px`; 
+    slashMenuEl.classList.remove('hidden');
+}
+
+function navigateSlashMenu(dir) {
+    if(!slashMenuEl) return; const items = Array.from(slashMenuEl.children); if(items.length === 0) return;
+    let idx = items.findIndex(i => i.classList.contains('selected'));
+    if(idx !== -1) items[idx].classList.remove('selected');
+    idx = (idx + dir + items.length) % items.length;
+    items[idx].classList.add('selected');
+}
+function closeSlashMenu() { slashMenuEl?.classList.add('hidden'); slashQuery = null; slashTargetBlock = null; }
+
+let savedCaretRange = null, pendingExtLinkBlock = null;
+
+function executeCommand(cmdId) {
+    if (!slashTargetBlock) return;
+    const targetBlock = slashTargetBlock; const contentEl = targetBlock.querySelector('.block-content');
+    contentEl.textContent = contentEl.textContent.substring(0, contentEl.textContent.lastIndexOf('/'));
+    contentEl.focus(); setCaretPosition(contentEl, contentEl.textContent.length);
+    savedCaretRange = window.getSelection().getRangeAt(0).cloneRange();
+    closeSlashMenu();
+
+    if (cmdId === 'image') {
+        document.getElementById('image-upload-input').click();
+    } else if (cmdId === 'link') {
+        pendingExtLinkBlock = targetBlock; 
+        document.getElementById('ext-link-title').value = ''; document.getElementById('ext-link-url').value = '';
+        document.getElementById('ext-link-overlay').classList.remove('hidden');
+        setTimeout(() => document.getElementById('ext-link-url').focus(), 10);
+    } else if (cmdId === 'linkpage') {
+        const linkSelect = document.getElementById('link-select');
+        linkSelect.innerHTML = '';
+        Object.values(state.pages).forEach(p => {
+            if(p.id !== state.currentPageId) { 
+                const opt = document.createElement('option');
+                opt.value = p.id; opt.textContent = p.title || '無題'; linkSelect.appendChild(opt);
+            }
+        });
+        document.getElementById('link-overlay').classList.remove('hidden');
+        pendingExtLinkBlock = targetBlock;
+    } else if (cmdId === 'page') {
+        const childId = generateId();
+        const childPage = { 
+            id: childId, 
+            title: '', 
+            parentId: state.currentPageId, 
+            blocks: [{ id: generateId(), type: 'p', content: '', children:[] }], 
+            isLocked: false 
+        };
+        state.pages[childId] = childPage;
+
+        (async () => {
+            await createPageInAppwrite(childPage);
+            const temp = document.createElement('div'); 
+            renderBlocks([{id: targetBlock.dataset.id, type: 'page_link', content: childId, children:[]}], temp);
+            targetBlock.replaceWith(temp.firstElementChild);
+            saveEditorState(true); 
+            renderTree(); 
+            openPage(childId); 
+            setTimeout(() => pageTitleEl.focus(), 10);
+        })();
+    } else {
+        const temp = document.createElement('div'); 
+        const extracted = { id: targetBlock.dataset.id, type: cmdId, content: contentEl.innerHTML, children:[] };
+        if (cmdId === 'toggle') { extracted.toggleOpen = true; extracted.children = [{id: generateId(), type: 'p', content: '', children: []}]; }
+        renderBlocks([extracted], temp);
+        const newEl = temp.firstElementChild;
+        targetBlock.replaceWith(newEl); newEl.querySelector(':scope > .block-main > .block-content').focus();
+        saveEditorState(true); reinitSortables();
+    }
+}
+
+document.getElementById('ext-link-cancel')?.addEventListener('click', () => {
+    document.getElementById('ext-link-overlay').classList.add('hidden');
+    if(pendingExtLinkBlock && savedCaretRange) {
+        pendingExtLinkBlock.querySelector('.block-content')?.focus();
+        const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(savedCaretRange);
+    }
+});
+document.getElementById('ext-link-submit')?.addEventListener('click', () => {
+    let title = document.getElementById('ext-link-title').value || 'Link';
+    let url = document.getElementById('ext-link-url').value;
+    if(!url) return;
+    if (!url.startsWith('http://') && !url.startsWith('https://')) url = 'https://' + url;
+    document.getElementById('ext-link-overlay').classList.add('hidden');
+    if (pendingExtLinkBlock && savedCaretRange) {
+        pendingExtLinkBlock.querySelector('.block-content')?.focus();
+        const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(savedCaretRange);
+        const aTag = document.createElement('a');
+        aTag.href = url; aTag.target = "_blank"; aTag.rel = "noopener noreferrer"; aTag.textContent = title;
+        insertNodeAtCaret(aTag); insertNodeAtCaret(document.createTextNode('\u00A0'));
+        saveEditorState(true); pendingExtLinkBlock = null; 
+    }
+});
+document.getElementById('link-cancel')?.addEventListener('click', () => {
+    document.getElementById('link-overlay').classList.add('hidden');
+    pendingExtLinkBlock?.querySelector('.block-content')?.focus();
+});
+document.getElementById('link-submit')?.addEventListener('click', () => {
+    const selectedId = document.getElementById('link-select')?.value;
+    if(selectedId && pendingExtLinkBlock) {
+        const temp = document.createElement('div'); 
+        renderBlocks([{id: pendingExtLinkBlock.dataset.id, type: 'page_link', content: selectedId, children:[]}], temp);
+        pendingExtLinkBlock.replaceWith(temp.firstElementChild);
+        saveEditorState(true); renderTree(); reinitSortables();
+    }
+    document.getElementById('link-overlay').classList.add('hidden');
+});
+
+// ================= 画像アップロード =================
+document.getElementById('image-upload-input').addEventListener('change', async function(e) {
+    const file = e.target.files[0]; 
+    if(!file || !slashTargetBlock) return;
+    
+    await uploadAndInsertImage(file, slashTargetBlock);
+    this.value = '';
+});
+
+async function uploadAndInsertImage(file, targetBlock) {
+    const qualityMode = localStorage.getItem('motion_image_quality') || 'original';
+    let fileToUpload = file;
+
+    if (qualityMode === 'compressed') {
+        fileToUpload = await compressImage(file, 1200, 0.7);
+    }
+
+    try {
+        const safeName = `img_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.jpg`;
+        const uploadFile = new File([fileToUpload], safeName, { type: fileToUpload.type || 'image/jpeg' });
+
+        const fileUploadRes = await storage.createFile(
+            BUCKET_ID,
+            ID.unique(),
+            uploadFile,
+            [
+                Permission.read(Role.any()),
+                Permission.write(Role.user(currentUser.$id))
+            ]
+        );
+
+        const fileUrl = storage.getFileView(BUCKET_ID, fileUploadRes.$id);
+
+        const temp = document.createElement('div');
+        renderBlocks([{ id: targetBlock.dataset.id, type: 'image', content: fileUrl, children:[] }], temp);
+        targetBlock.replaceWith(temp.firstElementChild);
+        saveEditorState(true); 
+        reinitSortables();
+    } catch (err) {
+        alert("画像のアップロードに失敗しました: " + err.message);
+        console.error(err);
+    }
+}
+
+function compressImage(file, maxWidth, quality) {
+    return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = (event) => {
+            const img = new Image();
+            img.src = event.target.result;
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                let width = img.width;
+                let height = img.height;
+
+                if (width > maxWidth) {
+                    height = Math.round((height * maxWidth) / width);
+                    width = maxWidth;
+                }
+
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+
+                canvas.toBlob((blob) => {
+                    resolve(new File([blob], file.name || 'image.jpg', { type: 'image/jpeg', lastModified: Date.now() }));
+                }, 'image/jpeg', quality);
+            };
+        };
+    });
+}
+
+// ================= リッチテキスト Floating Menu =================
+const floatMenu = document.getElementById('floating-menu');
+document.addEventListener('selectionchange', () => {
+    const sel = window.getSelection();
+    if (!sel.isCollapsed && sel.rangeCount > 0) {
+        const range = sel.getRangeAt(0);
+        if (editorEl.contains(range.commonAncestorContainer)) {
+            const rect = range.getBoundingClientRect();
+            floatMenu.style.top = `${rect.top + window.scrollY - 40}px`;
+            floatMenu.style.left = `${rect.left + window.scrollX + (rect.width/2) - (floatMenu.offsetWidth/2)}px`;
+            floatMenu.classList.remove('hidden'); return;
+        }
+    }
+    floatMenu.classList.add('hidden');
+});
+
+floatMenu.addEventListener('mousedown', (e) => {
+    e.preventDefault(); 
+    const btn = e.target.closest('button[data-cmd]');
+    if (!btn) return;
+    const cmd = btn.dataset.cmd, val = btn.dataset.val || null;
+    document.execCommand(cmd, false, val);
+    saveEditorState(); floatMenu.classList.add('hidden');
+});
+
+// ================= 全文検索・設定等のその他のUI =================
+document.getElementById('search-btn').addEventListener('click', openSearchModal);
+function openSearchModal() {
+    const searchOverlay = document.getElementById('search-overlay'), searchInput = document.getElementById('search-input'), resultsEl = document.getElementById('search-results');
+    searchOverlay.classList.remove('hidden'); searchInput.value = ''; resultsEl.innerHTML = ''; searchInput.focus();
+    
+    searchInput.oninput = (e) => {
+        const q = e.target.value.toLowerCase(); resultsEl.innerHTML = '';
+        if(!q) return;
+        Object.values(state.pages).forEach(p => {
+            let match = false; let snippet = '';
+            if ((p.title||'無題').toLowerCase().includes(q)) match = true;
+            else {
+                const searchBlocks = (blocks) => {
+                    for(let b of blocks) {
+                        if(b.content && typeof b.content==='string' && b.type!=='image' && b.type!=='page_link') {
+                            const text = b.content.replace(/<[^>]+>/g, '').toLowerCase();
+                            if(text.includes(q)) { match = true; snippet = text.substring(Math.max(0, text.indexOf(q)-15), text.indexOf(q)+20) + '...'; return; }
+                        }
+                        if(b.children) searchBlocks(b.children);
+                    }
+                };
+                if(Array.isArray(p.blocks)) searchBlocks(p.blocks);
+            }
+            if(match) {
+                const div = document.createElement('div'); div.className = 'search-item';
+                div.innerHTML = `<strong>${p.title||'無題'}</strong><br><span style="font-size:12px;color:var(--text-muted);">${snippet}</span>`;
+                div.onclick = () => { searchOverlay.classList.add('hidden'); openPage(p.id); };
+                resultsEl.appendChild(div);
+            }
+        });
+    };
+}
+
+document.getElementById('settings-btn').addEventListener('click', () => document.getElementById('settings-overlay').classList.remove('hidden'));
+document.getElementById('settings-close').addEventListener('click', () => document.getElementById('settings-overlay').classList.add('hidden'));
+
+document.getElementById('setting-show-locked')?.addEventListener('change', (e) => {
+    localStorage.setItem('motion_show_locked_in_home', e.target.checked);
+    if(state.currentPageId === 'home') renderHome();
+});
+
+document.querySelectorAll('.settings-tab').forEach(tab => {
+    tab.onclick = () => {
+        document.querySelectorAll('.settings-tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-pane').forEach(p => p.classList.add('hidden'));
+        tab.classList.add('active'); document.getElementById('tab-' + tab.dataset.tab).classList.remove('hidden');
+    };
+});
+document.querySelectorAll('input[name="theme"]').forEach(r => r.onchange = (e) => { localStorage.setItem('local_workspace_theme', r.value); applyTheme(); });
+
+document.getElementById('btn-export')?.addEventListener('click', () => {
+    const exportData = clone(state);
+    Object.values(exportData.pages).forEach(p => {
+        delete p.isUnlockedSession;
+        delete p.$id;
+    });
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportData));
+    const dlAnchor = document.createElement('a'); 
+    dlAnchor.setAttribute("href", dataStr); 
+    dlAnchor.setAttribute("download", "motion_workspace.json"); 
+    dlAnchor.click();
+});
+document.getElementById('btn-import')?.addEventListener('click', () => document.getElementById('file-import')?.click());
+document.getElementById('file-import')?.addEventListener('change', async (e) => {
+    const file = e.target.files[0]; if (!file) return;
+    const reader = new FileReader();
+    
+    reader.onload = async (event) => {
+        try {
+            const imported = JSON.parse(event.target.result);
+            if(imported && imported.pages) {
+                alert("クラウドへのインポートを開始します。完了するまでブラウザを閉じないでください...");
+                for (const key of Object.keys(imported.pages)) {
+                    const page = imported.pages[key];
+                    const existing = state.pages[page.id];
+                    if (existing && existing.$id) {
+                        page.$id = existing.$id; 
+                        await saveDataToAppwrite(page);
+                    } else {
+                        await createPageInAppwrite(page);
+                    }
+                }
+                const uiState = {
+                    expandedNodes: imported.expandedNodes || [],
+                    recentPages: imported.recentPages || []
+                };
+                localStorage.setItem('motion_ui_state', JSON.stringify(uiState));
+                alert("復元が完了しました。ページを再読み込みします。");
+                location.reload();
+            }
+        } catch (err) {
+            alert("インポートに失敗しました: " + err.message);
+            console.error(err);
+        }
+    };
+    reader.readAsText(file);
+});
+
+document.getElementById('btn-reset')?.addEventListener('click', async () => {
+    if(confirm("【警告】全データを消去します。\nこの操作はクラウド(Appwrite)上のあなたのデータも完全に削除します。よろしいですか？")) {
+        try {
+            if (currentUser) {
+                const response = await databases.listDocuments(DB_ID, COLLECTION_PAGES);
+                for (const doc of response.documents) {
+                    await databases.deleteDocument(DB_ID, COLLECTION_PAGES, doc.$id);
+                }
+            }
+            localStorage.clear(); 
+            location.reload();
+        } catch (err) {
+            alert("リセット失敗: " + err.message);
+        }
+    }
+});
+
+document.getElementById('editor-bottom-padding')?.addEventListener('click', () => {
+    if (state.currentPageId === 'home') return;
+    const all = getVisibleContents();
+    if(all.length > 0) {
+        const last = all[all.length-1];
+        if(last.textContent !== '') {
+            const temp = document.createElement('div'); renderBlocks([{id: generateId(), type:'p', content:'', children:[]}], temp);
+            editorEl.appendChild(temp.firstElementChild); getVisibleContents().pop().focus(); saveEditorState(true); reinitSortables();
+        } else last.focus();
+    }
+});
+
+document.getElementById('modal-pass')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); document.getElementById('modal-submit')?.click(); }
+});
+document.getElementById('ext-link-url')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); document.getElementById('ext-link-submit')?.click(); }
+});
+document.getElementById('ext-link-title')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); document.getElementById('ext-link-submit')?.click(); }
+});
+document.getElementById('link-select')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); document.getElementById('link-submit')?.click(); }
+});
+document.getElementById('search-input')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        const firstResult = document.querySelector('#search-results .search-item');
+        if (firstResult) firstResult.click();
+    }
+});

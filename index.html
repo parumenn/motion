@@ -134,7 +134,17 @@
         <h3 id="modal-title">ページはロックされています</h3>
         <p class="modal-desc">パスワードを入力して解除してください</p>
         <form id="lock-pass-form" onsubmit="return false;">
-            <input type="password" id="modal-pass" name="lock-password" placeholder="パスワード" autocomplete="current-password">
+            <input 
+  type="text" 
+  id="modal-pass" 
+  autocomplete="one-time-code"
+  data-1p-ignore="true"
+  data-bwignore="true"
+  data-lpignore="true"
+  data-form-type="other"
+  style="-webkit-text-security: disc; text-security: disc;"
+  placeholder="パスワードを入力"
+/>
             <button type="button" id="modal-submit" class="primary-btn">解除</button>
             <button type="button" id="modal-cancel" class="cancel-btn">キャンセル</button>
         </form>

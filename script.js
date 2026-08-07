@@ -71,31 +71,38 @@ async function savePrefs(key, value) {
 
 // ================= 認証・初期化処理 =================
 async function initApp() {
-    applyTheme(); // 初期適用(未ログイン状態)
+    applyTheme();
+    
+    const savedQuality = localStorage.getItem('motion_image_quality') || 'original';
+    const qualitySelect = document.getElementById('setting-image-quality');
+    if (qualitySelect) qualitySelect.value = savedQuality;
 
     try {
         currentUser = await account.get();
+        
+        // --- ★ 追加: アカウントの承認ステータスチェック ---
+        try {
+            // 'users' コレクションから自身のステータスを取得
+            const userDoc = await databases.getDocument(DB_ID, 'users', currentUser.$id);
+            if (userDoc.status !== 'approved') {
+                alert('アカウントは現在管理者の承認待ちです。承認されるまでアクセスできません。');
+                await account.deleteSession('current');
+                currentUser = null;
+                showAuthModal();
+                return;
+            }
+        } catch (err) {
+            // ドキュメントが無い、または未完了の場合
+            alert('アカウントの承認情報が取得できません。承認待ちか、登録が未完了です。');
+            await account.deleteSession('current');
+            currentUser = null;
+            showAuthModal();
+            return;
+        }
+        // ---------------------------------------------------
+
         document.getElementById('user-info-text').textContent = `ログイン中: ${currentUser.name} (${currentUser.email})`;
         
-        // --- 設定をクラウドから復元 ---
-        try {
-            const prefs = await account.getPrefs();
-            let themeChanged = false;
-            if (prefs.theme) { localStorage.setItem('local_workspace_theme', prefs.theme); themeChanged = true; }
-            if (prefs.image_quality) localStorage.setItem('motion_image_quality', prefs.image_quality);
-            if (prefs.show_locked !== undefined) localStorage.setItem('motion_show_locked_in_home', prefs.show_locked);
-            if (themeChanged) applyTheme();
-        } catch (e) { console.error("Prefs load error:", e); }
-        // ------------------------------
-
-        // 設定画面のUI要素に現在の設定値を反映
-        const savedQuality = localStorage.getItem('motion_image_quality') || 'original';
-        const qualitySelect = document.getElementById('setting-image-quality');
-        if (qualitySelect) qualitySelect.value = savedQuality;
-
-        const showLockedCheck = document.getElementById('setting-show-locked');
-        if (showLockedCheck) showLockedCheck.checked = (localStorage.getItem('motion_show_locked_in_home') === 'true');
-
         const savedUi = localStorage.getItem('motion_ui_state');
         if (savedUi) {
             const parsedUi = JSON.parse(savedUi);
@@ -105,6 +112,7 @@ async function initApp() {
 
         await loadDataFromAppwrite();
 
+        // ロック中のページクリーンアップ
         state.expandedNodes = state.expandedNodes.filter(id => {
             const lockedBy = isPageLocked(id);
             return !lockedBy || lockedBy.isUnlockedSession;
@@ -190,55 +198,134 @@ async function calcStorageUsage() {
 
 const usernameToEmail = (username) => `${username.toLowerCase()}@motion.local`;
 
+let tempAuthData = null; // OTP検証用データ保持
+
 function showAuthModal() {
     const authOverlay = document.getElementById('login-overlay');
     if (!authOverlay) return;
 
+    // 架空のユーザー名ではなく、実際のメールアドレス入力として扱う
     const usernameInput = document.getElementById('auth-username');
+    usernameInput.placeholder = "メールアドレス"; 
+    usernameInput.type = "email";
+    
     const passwordInput = document.getElementById('auth-password');
     const authSubmit = document.getElementById('auth-submit-btn');
     const authToggle = document.getElementById('auth-toggle-btn');
+    const authForm = document.getElementById('auth-form');
 
+    // ★ 6桁コード(OTP)入力用UIの動的追加
+    let otpContainer = document.getElementById('otp-container');
+    if (!otpContainer) {
+        otpContainer = document.createElement('div');
+        otpContainer.id = 'otp-container';
+        otpContainer.className = 'hidden';
+        otpContainer.innerHTML = `
+            <p style="font-size:14px; margin-bottom:12px; color:var(--text-main);">メールに送信された6桁の認証コードを入力してください。</p>
+            <input type="text" id="auth-otp" placeholder="6桁のコード" maxlength="6" style="margin-bottom:12px;">
+            <button type="button" id="auth-otp-submit" class="primary-btn">認証して申請</button>
+            <button type="button" id="auth-otp-cancel" class="cancel-btn">キャンセル</button>
+        `;
+        authForm.appendChild(otpContainer);
+    }
+
+    // 既存の入力欄を切り替えやすくするためにラップする
+    let inputsWrapper = document.getElementById('auth-inputs-wrapper');
+    if (!inputsWrapper) {
+        inputsWrapper = document.createElement('div');
+        inputsWrapper.id = 'auth-inputs-wrapper';
+        usernameInput.parentNode.insertBefore(inputsWrapper, usernameInput);
+        inputsWrapper.append(usernameInput, passwordInput, authSubmit, authToggle);
+    }
+
+    // 初期化
     usernameInput.value = '';
     passwordInput.value = '';
-
+    inputsWrapper.classList.remove('hidden');
+    otpContainer.classList.add('hidden');
     authOverlay.classList.remove('hidden');
     let isSignUp = false;
 
     authToggle.onclick = () => {
         isSignUp = !isSignUp;
         document.getElementById('auth-title').textContent = isSignUp ? 'アカウント作成' : 'ログイン';
-        authSubmit.textContent = isSignUp ? '作成してログイン' : 'ログイン';
+        authSubmit.textContent = isSignUp ? 'コードを送信' : 'ログイン';
         authToggle.textContent = isSignUp ? 'ログインへ切替' : 'アカウント作成へ切替';
-
         usernameInput.value = '';
         passwordInput.value = '';
         passwordInput.setAttribute('autocomplete', isSignUp ? 'new-password' : 'current-password');
     };
 
+    // ログインまたはコード送信ボタン
     authSubmit.onclick = async () => {
-        const username = usernameInput.value.trim();
+        const email = usernameInput.value.trim();
         const pass = passwordInput.value.trim();
-        const email = usernameToEmail(username);
 
-        if (!username || !pass) return alert('ユーザー名とパスワードを入力してください');
+        if (!email || !pass) return alert('メールアドレスとパスワードを入力してください');
 
         try {
             if (isSignUp) {
-                await account.create(ID.unique(), email, pass, username);
+                // ★ Appwrite Email OTP（6桁コード送信）を呼び出し
+                const token = await account.createEmailToken(ID.unique(), email);
+                tempAuthData = { userId: token.userId, pass, email };
+                
+                // UIをコード入力画面に切り替え
+                inputsWrapper.classList.add('hidden');
+                otpContainer.classList.remove('hidden');
+                document.getElementById('auth-title').textContent = 'メール認証';
+                alert('認証コードをメールに送信しました。');
+            } else {
+                // 通常ログイン
+                await account.createEmailSession(email, pass);
+                usernameInput.value = '';
+                passwordInput.value = '';
+                authOverlay.classList.add('hidden');
+                location.reload();
             }
-            await account.createEmailSession(email, pass);
-            
-            usernameInput.value = '';
-            passwordInput.value = '';
-            authOverlay.classList.add('hidden');
-            
-            location.reload();
         } catch (e) {
             alert(`エラー: ${e.message}`);
         }
     };
+
+    // ★ 6桁コードの検証・アカウント作成完了処理
+    document.getElementById('auth-otp-submit').onclick = async () => {
+        const secret = document.getElementById('auth-otp').value.trim();
+        if(!secret) return alert('認証コードを入力してください');
+        
+        try {
+            // OTPで認証し、一時的にログインセッションを作成
+            await account.createSession(tempAuthData.userId, secret);
+            
+            // ユーザーが入力していたパスワードを設定
+            await account.updatePassword(tempAuthData.pass);
+            
+            // データベースに「承認待ち」として登録
+            await databases.createDocument(DB_ID, 'users', tempAuthData.userId, { 
+                email: tempAuthData.email, 
+                status: 'pending' 
+            });
+            
+            // 管理者へメール通知
+            await sendAdminRequestEmail(tempAuthData.email);
+
+            // 承認待ち状態にするため、一旦ログアウトさせる
+            await account.deleteSession('current');
+            
+            alert('管理者にアカウント開設のリクエストを送りました。承認されるまでお待ちください。');
+            location.reload();
+        } catch (e) {
+            alert(`認証エラー: ${e.message}`);
+        }
+    };
+
+    document.getElementById('auth-otp-cancel').onclick = () => {
+        inputsWrapper.classList.remove('hidden');
+        otpContainer.classList.add('hidden');
+        document.getElementById('auth-title').textContent = 'アカウント作成';
+        tempAuthData = null;
+    };
 }
+
 document.getElementById('btn-change-pass')?.addEventListener('click', async () => {
     const oldPass = document.getElementById('change-pass-old').value;
     const newPass = document.getElementById('change-pass-new').value;
@@ -1578,3 +1665,32 @@ document.getElementById('search-input')?.addEventListener('keydown', (e) => {
         if (firstResult) firstResult.click();
     }
 });
+
+// ================= 新規アカウント承認・管理関連 =================
+
+// ★ 1. 管理者へアカウント開設リクエストのメールを送る処理
+async function sendAdminRequestEmail(userEmail) {
+    // ※ EmailJS などのサービスを利用してフロントエンドからメールを送る例です。
+    console.log(`[擬似メール送信] 管理者 (thonglo02cocoa@gmail.com) 宛て`);
+    console.log(`本文: 新規ユーザー (${userEmail}) からアカウント開設のリクエストがありました。`);
+    
+    /* 
+    実際にはここに EmailJS のコード等を組み込みます。
+    例:
+    await emailjs.send("YOUR_SERVICE_ID", "YOUR_TEMPLATE_ID", {
+        admin_email: "thonglo02cocoa@gmail.com",
+        request_user_email: userEmail,
+    });
+    */
+}
+
+// ★ 2. サイト上の管理者ページ等に組み込む「承認処理」の関数
+// この関数を管理者用のUI（ボタン等）から呼び出すことでアカウントを承認します。
+async function approveAccount(targetUserId) {
+    try {
+        await databases.updateDocument(DB_ID, 'users', targetUserId, { status: 'approved' });
+        alert('アカウントを承認しました。ユーザーはログイン可能になります。');
+    } catch (err) {
+        alert('承認エラー: ' + err.message);
+    }
+}

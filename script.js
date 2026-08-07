@@ -71,6 +71,7 @@ async function savePrefs(key, value) {
 
 // ================= 認証・初期化処理 =================
 // ================= 認証・初期化処理 =================
+// ================= 認証・初期化処理 =================
 async function initApp() {
     applyTheme();
     
@@ -79,30 +80,29 @@ async function initApp() {
     if (qualitySelect) qualitySelect.value = savedQuality;
 
     try {
-        // 1. まずログイン中のユーザー情報を取得（未ログインならcatchへ飛んでログインモーダルを表示）
+        // 1. セッションの取得（未ログインならcatchへ飛んでログインモーダルを表示）
         currentUser = await account.get();
         
         // 2. アカウントの承認ステータスチェック
         try {
             const userDoc = await databases.getDocument(DB_ID, 'users', currentUser.$id);
             if (userDoc.status !== 'approved') {
-                await account.deleteSession('current');
-                currentUser = null;
-                alert('アカウントは現在管理者の承認待ちです。承認されるまでアクセスできません。');
-                showAuthModal();
+                // 【重要】セッションをその都度消してループさせず、専用の承認待ち画面で処理を止める
+                showPendingApprovalModal(currentUser.email);
                 return;
             }
         } catch (err) {
-            await account.deleteSession('current');
-            currentUser = null;
-            alert('アカウントの承認情報が取得できません。承認待ちか、登録が未完了です。');
-            showAuthModal();
+            // ユーザーのドキュメントが見つからない場合も承認待ちとして扱う
+            showPendingApprovalModal(currentUser?.email || '');
             return;
         }
 
-        document.getElementById('user-info-text').textContent = `ログイン中: ${currentUser.name} (${currentUser.email})`;
+        // --- 以下、承認済みユーザーのみの初期化処理 ---
+        const userInfoText = document.getElementById('user-info-text');
+        if (userInfoText) {
+            userInfoText.textContent = `ログイン中: ${currentUser.name} (${currentUser.email})`;
+        }
         
-        // ★ 管理者（thonglo02cocoa@gmail.com）の場合、設定画面の管理者タブを表示 & 未承認チェック
         if (currentUser.email === 'thonglo02cocoa@gmail.com') {
             document.getElementById('tab-btn-admin')?.classList.remove('hidden');
             checkPendingUsersForAdmin();
@@ -117,7 +117,6 @@ async function initApp() {
 
         await loadDataFromAppwrite();
 
-        // ロック中のページクリーンアップ
         state.expandedNodes = state.expandedNodes.filter(id => {
             const lockedBy = isPageLocked(id);
             return !lockedBy || lockedBy.isUnlockedSession;
@@ -127,12 +126,39 @@ async function initApp() {
         openPage('home');
         calcStorageUsage();
     } catch (err) {
-        // 未ログイン状態などのエラー時は確実にログインモーダルを表示する
+        // 未ログイン時のエラー
         currentUser = null;
         showAuthModal();
     }
 }
 
+// 未承認ユーザー用の停止画面を表示するヘルパー関数
+function showPendingApprovalModal(email) {
+    const authOverlay = document.getElementById('login-overlay');
+    if (!authOverlay) return;
+
+    // ログインフォーム部分を書き換えて、ループを防ぎながら「承認待ち」を通知する
+    const formContainer = document.querySelector('.login-form-container .modal');
+    if (formContainer) {
+        formContainer.innerHTML = `
+            <h3>承認待ちです</h3>
+            <p style="font-size:14px; color:var(--text-main); margin:16px 0; line-height:1.6;">
+                アカウント (<strong>${email}</strong>) は現在管理者の承認待ちです。<br>
+                承認されるまでご利用いただけません。
+            </p>
+            <button type="button" id="pending-logout-btn" class="primary-btn" style="margin-bottom:8px;">ログアウトして別のアカウントでログイン</button>
+        `;
+
+        document.getElementById('pending-logout-btn').onclick = async () => {
+            try {
+                await account.deleteSession('current');
+            } catch (e) {}
+            currentUser = null;
+            location.reload();
+        };
+    }
+    authOverlay.classList.remove('hidden');
+}
 // イベントリスナー: 設定が変更されたらローカルストレージとクラウド両方に保存
 document.getElementById('setting-image-quality')?.addEventListener('change', (e) => {
     const val = e.target.value;

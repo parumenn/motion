@@ -14,6 +14,25 @@ const COMMANDS = [
 let state = { pages: {}, rootPages: [], currentPageId: null, expandedNodes: [], recentPages: [] };
 let sortableInstances = [];
 
+let pendingImageTargetBlock = null; // 画像アップロード対象ブロックの保持用
+
+// Appwrite Storageから画像を削除する処理
+async function deleteImageFromStorage(fileUrl, fileId) {
+    let idToDelete = fileId;
+    if (!idToDelete && fileUrl) {
+        // URLからfileIdを抽出 (/files/{fileId}/view)
+        const match = fileUrl.match(/\/files\/([^\/]+)\//);
+        if (match) idToDelete = match[1];
+    }
+    if (idToDelete) {
+        try {
+            await storage.deleteFile(BUCKET_ID, idToDelete);
+        } catch (e) {
+            console.error('Storage delete error:', e);
+        }
+    }
+}
+
 let historyStack = {}; 
 let historyIndex = {};
 
@@ -706,11 +725,15 @@ function renderBlocks(blockArray, container) {
             if(target) content.onclick = () => openPage(blockData.content);
             content.addEventListener('keydown', handleNonTextKeydown);
         } else if (blockData.type === 'image') {
-            content.contentEditable = "false"; 
-            content.tabIndex = 0;
-            content.innerHTML = `<img src="${blockData.content}" alt="画像">`;
-            content.addEventListener('keydown', handleNonTextKeydown);
-        } else {
+    content.contentEditable = "false"; 
+    content.tabIndex = 0;
+    if (blockData.fileId) content.dataset.fileId = blockData.fileId;
+    content.innerHTML = `<img src="${blockData.content}" alt="画像">`;
+    
+    // クリック時に確実にフォーカスを当てる
+    content.onclick = () => content.focus();
+    content.addEventListener('keydown', handleNonTextKeydown);
+} else {
             content.contentEditable = "true"; 
             content.innerHTML = blockData.content || '';
             content.addEventListener('keydown', handleBlockKeydown); 
@@ -736,6 +759,13 @@ function handleNonTextKeydown(e) {
     if (e.key === 'Backspace' || e.key === 'Delete') { 
         e.preventDefault(); 
         const prev = wrapper.previousElementSibling; 
+
+        if (wrapper.dataset.type === 'image') {
+            const imgEl = wrapper.querySelector('img');
+            const fileId = contentEl?.dataset.fileId;
+            if (imgEl) deleteImageFromStorage(imgEl.src, fileId);
+        }
+        
         wrapper.remove(); 
         saveEditorState(true); 
         if (prev) { 
@@ -761,7 +791,20 @@ function handleNonTextKeydown(e) {
     } else if (e.key === 'ArrowDown' || e.key === 'ArrowRight' || e.key === 'Enter') {
         e.preventDefault(); 
         const next = wrapper.nextElementSibling;
-        if (next && next.classList.contains('block-wrapper')) { 
+        if (e.key === 'Enter' || !next) {
+            // 画像等の下でEnterを押す、または下が無い場合は新しい段落を作る
+            const tempContainer = document.createElement('div');
+            const newId = generateId();
+            renderBlocks([{ id: newId, type: 'p', content: '', children: [] }], tempContainer);
+            const newBlock = tempContainer.firstElementChild;
+            wrapper.after(newBlock);
+            
+            const nc = newBlock.querySelector('.block-content');
+            if (nc) nc.focus();
+            
+            saveEditorState(true);
+            reinitSortables();
+        } else if (next && next.classList.contains('block-wrapper')) { 
             const nc = next.querySelector('.block-content'); 
             if (nc) {
                 nc.focus(); 
@@ -801,6 +844,7 @@ function extractBlocks(container) {
             id: wrapper.dataset.id, 
             type, 
             content, 
+            fileId,
             checked: wrapper.classList.contains('checked'), 
             toggleOpen: wrapper.classList.contains('open'), 
             children: extractBlocks(wrapper.querySelector(':scope > .block-children')) 
@@ -1068,8 +1112,9 @@ function executeCommand(cmdId) {
     closeSlashMenu();
 
     if (cmdId === 'image') {
-        document.getElementById('image-upload-input').click();
-    } else if (cmdId === 'link') {
+    pendingImageTargetBlock = targetBlock; // ブロックを保持
+    document.getElementById('image-upload-input').click();
+} else if (cmdId === 'link') {
         pendingExtLinkBlock = targetBlock; 
         document.getElementById('ext-link-title').value = ''; document.getElementById('ext-link-url').value = '';
         document.getElementById('ext-link-overlay').classList.remove('hidden');
@@ -1157,10 +1202,12 @@ document.getElementById('link-submit')?.addEventListener('click', () => {
 // ================= 画像アップロード =================
 document.getElementById('image-upload-input').addEventListener('change', async function(e) {
     const file = e.target.files[0]; 
-    if(!file || !slashTargetBlock) return;
+    const target = pendingImageTargetBlock || slashTargetBlock;
+    if(!file || !target) return;
     
-    await uploadAndInsertImage(file, slashTargetBlock);
+    await uploadAndInsertImage(file, target);
     this.value = '';
+    pendingImageTargetBlock = null;
 });
 
 async function uploadAndInsertImage(file, targetBlock) {
@@ -1188,7 +1235,15 @@ async function uploadAndInsertImage(file, targetBlock) {
         const fileUrl = storage.getFileView(BUCKET_ID, fileUploadRes.$id);
 
         const temp = document.createElement('div');
-        renderBlocks([{ id: targetBlock.dataset.id, type: 'image', content: fileUrl, children:[] }], temp);
+        // fileId も渡す
+        renderBlocks([{ 
+            id: targetBlock.dataset.id, 
+            type: 'image', 
+            content: fileUrl, 
+            fileId: fileUploadRes.$id, 
+            children:[] 
+        }], temp);
+        
         targetBlock.replaceWith(temp.firstElementChild);
         saveEditorState(true); 
         reinitSortables();

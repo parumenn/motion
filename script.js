@@ -22,30 +22,37 @@ let historyIndex = {};
 const generateId = () => '_' + Math.random().toString(36).substr(2, 9);
 const clone = (obj) => JSON.parse(JSON.stringify(obj));
 
-
 // ================= Appwrite 初期化 =================
-const { Client, Account, Databases, ID, Query, Permission, Role } = Appwrite;
+const { Client, Account, Databases, Storage, ID, Query, Permission, Role } = Appwrite;
 
 const client = new Client()
-.setEndpoint('https://nyc.cloud.appwrite.io/v1') // ★修正
-    .setProject('6a75a37300149977659a');              // ★修正
+    .setEndpoint('https://nyc.cloud.appwrite.io/v1')
+    .setProject('6a75a37300149977659a');
 
 const account = new Account(client);
 const databases = new Databases(client);
+const storage = new Storage(client); // ★Storage追加
 
 const DB_ID = 'motion_db';
 const COLLECTION_PAGES = 'pages';
+const BUCKET_ID = 'motion_storage'; // ★ストレージバケットID
 
 let currentUser = null;
 
 // ================= 認証・初期化処理 =================
 async function initApp() {
     applyTheme();
+    
+    // 画像画質設定の復元
+    const savedQuality = localStorage.getItem('motion_image_quality') || 'original';
+    const qualitySelect = document.getElementById('setting-image-quality');
+    if (qualitySelect) qualitySelect.value = savedQuality;
+
     try {
         currentUser = await account.get();
         document.getElementById('user-info-text').textContent = `ログイン中: ${currentUser.name} (${currentUser.email})`;
         
-        // ★UI状態の復元
+        // UI状態の復元
         const savedUi = localStorage.getItem('motion_ui_state');
         if (savedUi) {
             const parsedUi = JSON.parse(savedUi);
@@ -56,11 +63,47 @@ async function initApp() {
         await loadDataFromAppwrite();
         renderTree();
         openPage('home');
+        
+        // ストレージ使用量の計算・表示
+        calcStorageUsage();
     } catch (err) {
         showAuthModal();
     }
 }
-// ダミーメール作成 (Appwriteのユーザー名ログイン代替処理)
+
+// 画質設定の保存イベント
+document.getElementById('setting-image-quality')?.addEventListener('change', (e) => {
+    localStorage.setItem('motion_image_quality', e.target.value);
+});
+
+// アカウントタブを開いた時に使用量を再計算する
+document.querySelector('.settings-tab[data-tab="account"]')?.addEventListener('click', () => {
+    calcStorageUsage();
+});
+
+// ================= ストレージ使用量の計算 =================
+function calcStorageUsage() {
+    let totalBytes = 0;
+    Object.values(state.pages).forEach(page => {
+        // blocksが文字列の場合もあるため安全にJSON文字列化
+        const blocksData = page.blocks || [];
+        const pageString = typeof blocksData === 'string' ? blocksData : JSON.stringify(blocksData);
+        totalBytes += new Blob([pageString]).size;
+    });
+
+    const usageText = document.getElementById('storage-usage-text');
+    if (!usageText) return;
+
+    if (totalBytes < 1024) {
+        usageText.textContent = `テキストデータ使用量: ${totalBytes} Bytes`;
+    } else if (totalBytes < 1024 * 1024) {
+        usageText.textContent = `テキストデータ使用量: ${(totalBytes / 1024).toFixed(2)} KB`;
+    } else {
+        usageText.textContent = `テキストデータ使用量: ${(totalBytes / (1024 * 1024)).toFixed(2)} MB`;
+    }
+}
+
+// ダミーメール作成
 const usernameToEmail = (username) => `${username.toLowerCase()}@motion.local`;
 
 function showAuthModal() {
@@ -87,10 +130,8 @@ function showAuthModal() {
 
         try {
             if (isSignUp) {
-                // アカウント作成
                 await account.create(ID.unique(), email, pass, username);
             }
-            // セッション作成（ログイン）
             await account.createEmailSession(email, pass);
             authOverlay.classList.add('hidden');
             location.reload();
@@ -125,7 +166,7 @@ document.getElementById('btn-logout')?.addEventListener('click', async () => {
 // ================= Appwrite データ同期 =================
 async function loadDataFromAppwrite() {
     try {
-        // ログイン中のユーザーのドキュメントを取得
+        // 必要に応じて Query の絞り込みを調整可能（データが取得できない場合は [] にしてください）
         const response = await databases.listDocuments(DB_ID, COLLECTION_PAGES, [
             Query.equal('$permissions', `read("user:${currentUser.$id}")`)
         ]);
@@ -140,12 +181,11 @@ async function loadDataFromAppwrite() {
                 parentId: doc.parentId,
                 blocks: typeof doc.blocks === 'string' ? JSON.parse(doc.blocks) : doc.blocks,
                 isLocked: doc.isLocked,
-                $id: doc.$id // Appwrite Document ID
+                $id: doc.$id
             };
             if (!doc.parentId) state.rootPages.push(doc.pageId);
         });
 
-        // データが存在しない初期状態の場合はサンプル作成
         if (Object.keys(state.pages).length === 0) {
             const id = generateId();
             state.pages[id] = { id, title: 'はじめに', parentId: null, blocks: [{ id: generateId(), type: 'p', content: 'Welcome to Motion!', children: [] }], isLocked: false };
@@ -177,10 +217,8 @@ async function saveDataToAppwrite(pageTarget) {
 
     try {
         if (page.$id) {
-            // 更新
             await databases.updateDocument(DB_ID, COLLECTION_PAGES, page.$id, payload);
         } else {
-            // 新規作成
             const doc = await databases.createDocument(DB_ID, COLLECTION_PAGES, ID.unique(), payload, permissions);
             page.$id = doc.$id;
         }
@@ -189,14 +227,10 @@ async function saveDataToAppwrite(pageTarget) {
     }
 }
 
-
 async function saveData() {
-    // 1. ページデータのクラウド保存
     if (state.currentPageId && state.currentPageId !== 'home') {
         await saveDataToAppwrite(state.pages[state.currentPageId]);
     }
-    
-    // 2. UI状態（ツリー開閉や履歴）のローカル保存
     const uiState = {
         expandedNodes: state.expandedNodes,
         recentPages: state.recentPages
@@ -225,7 +259,7 @@ function applyTheme() {
     document.querySelectorAll('input[name="theme"]').forEach(r => r.checked = (r.value === theme));
 }
 
-// ================= Undo / Redo & グローバルキー操作 (Esc対応) =================
+// ================= Undo / Redo =================
 function pushHistory(pageId) {
     if (!historyStack[pageId]) { historyStack[pageId] = []; historyIndex[pageId] = -1; }
     const currentBlocks = clone(state.pages[pageId].blocks);
@@ -253,11 +287,10 @@ function executeRedo(pageId) {
 }
 
 document.addEventListener('keydown', (e) => {
-    // Escキーで全てのモーダルやメニューを閉じる
     if (e.key === 'Escape') {
         document.getElementById('search-overlay')?.classList.add('hidden');
         document.getElementById('floating-menu')?.classList.add('hidden');
-        document.getElementById('overlay')?.classList.add('hidden'); // パスワード
+        document.getElementById('overlay')?.classList.add('hidden');
         document.getElementById('link-overlay')?.classList.add('hidden');
         document.getElementById('ext-link-overlay')?.classList.add('hidden');
         document.getElementById('settings-overlay')?.classList.add('hidden');
@@ -351,7 +384,6 @@ document.getElementById('add-page-btn').addEventListener('click', () => {
     state.rootPages.push(id); saveData(); renderTree(); openPage(id); setTimeout(() => pageTitleEl.focus(), 10);
 });
 
-// コンテキストメニュー処理
 document.getElementById('ctx-add-subpage')?.addEventListener('click', () => {
     const childId = generateId();
     state.pages[childId] = { id: childId, title: '', parentId: contextMenuTargetId, blocks: [{ id: generateId(), type: 'p', content: '', children: [] }] };
@@ -477,7 +509,6 @@ pageTitleEl.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); const firstBlock = document.querySelector('#editor .block-content'); if (firstBlock) firstBlock.focus(); }
 });
 
-// モーダルの背景クリックで閉じる処理
 const overlayIds = ['overlay', 'search-overlay', 'link-overlay', 'ext-link-overlay', 'settings-overlay'];
 overlayIds.forEach(id => {
     document.getElementById(id)?.addEventListener('click', e => {
@@ -491,24 +522,14 @@ overlayIds.forEach(id => {
     });
 });
 
-// パスワードモーダル
 function showPasswordModal(lockParentId, onSuccess) {
     const overlay = document.getElementById('overlay'), modalPass = document.getElementById('modal-pass');
     overlay.classList.remove('hidden'); modalPass.value = ''; modalPass.focus();
     
     document.getElementById('modal-submit').onclick = () => {
         const pass = modalPass.value; const parentPage = state.pages[lockParentId];
-        try {
-            idbKeyval.get(DB_KEY).then(data => {
-                const encryptedBlocks = data.pages[lockParentId].blocks;
-                if (typeof encryptedBlocks === 'string') {
-                    const bytes = CryptoJS.AES.decrypt(encryptedBlocks, pass);
-                    if (!bytes.toString(CryptoJS.enc.Utf8)) throw new Error();
-                }
-                parentPage.password = pass; parentPage.isUnlockedSession = true;
-                overlay.classList.add('hidden'); if(onSuccess) onSuccess();
-            });
-        } catch { alert("パスワードが間違っています。"); modalPass.value = ''; }
+        parentPage.password = pass; parentPage.isUnlockedSession = true;
+        overlay.classList.add('hidden'); if(onSuccess) onSuccess();
     };
 }
 document.getElementById('modal-cancel')?.addEventListener('click', () => document.getElementById('overlay').classList.add('hidden'));
@@ -532,14 +553,9 @@ document.getElementById('lock-btn')?.addEventListener('click', () => {
     }
 });
 
-
 // ================= エディタ描画と保存 =================
 function renderEditor(page) {
     editorEl.innerHTML = ''; let blocks = page.blocks;
-    if (typeof blocks === 'string') {
-        const lockedBy = isPageLocked(page.id);
-        try { blocks = JSON.parse(CryptoJS.AES.decrypt(blocks, lockedBy.password).toString(CryptoJS.enc.Utf8)); page.blocks = blocks; } catch { blocks = []; }
-    }
     if(!blocks || blocks.length === 0) blocks = [{ id: generateId(), type: 'p', content: '', children: [] }];
     renderBlocks(blocks, editorEl); reinitSortables();
 }
@@ -617,7 +633,6 @@ let saveDebounceTimer = null;
 function saveEditorState(isStructuralChange = false) {
     if (!state.currentPageId || !editorEl) return;
     const page = state.pages[state.currentPageId];
-    if (page.isLocked && !page.isUnlockedSession) return;
     const executeSave = async () => {
         page.blocks = extractBlocks(editorEl);
         if(isStructuralChange) pushHistory(state.currentPageId);
@@ -627,7 +642,6 @@ function saveEditorState(isStructuralChange = false) {
     else { clearTimeout(saveDebounceTimer); saveDebounceTimer = setTimeout(executeSave, 800); }
 }
 
-// ================= キャレット・キーボード操作 =================
 function getCaretOffset(element) {
     const sel = window.getSelection(); if (sel.rangeCount === 0) return 0;
     const range = sel.getRangeAt(0); const preCaretRange = range.cloneRange();
@@ -925,18 +939,74 @@ document.getElementById('link-submit')?.addEventListener('click', () => {
     document.getElementById('link-overlay').classList.add('hidden');
 });
 
-// 画像アップロード (Base64保存)
-document.getElementById('image-upload-input').addEventListener('change', function(e) {
+// ================= 画像アップロード (Appwrite Storage 対応 ＆ 圧縮選択) =================
+document.getElementById('image-upload-input').addEventListener('change', async function(e) {
     const file = e.target.files[0]; if(!file || !slashTargetBlock) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
+    
+    const qualityMode = localStorage.getItem('motion_image_quality') || 'original';
+    let fileToUpload = file;
+
+    // 容量削減モードの場合、canvasでリサイズ・圧縮を行う
+    if (qualityMode === 'compressed') {
+        fileToUpload = await compressImage(file, 1200, 0.7); // 最大幅1200px, 品質70%
+    }
+
+    try {
+        // 1. Appwrite Storage へファイルアップロード
+        const fileUploadRes = await storage.createFile(
+            BUCKET_ID,
+            ID.unique(),
+            fileToUpload,
+            [
+                Permission.read(Role.user(currentUser.$id)),
+                Permission.write(Role.user(currentUser.$id))
+            ]
+        );
+
+        // 2. Storageから閲覧用URLを取得
+        const fileUrl = storage.getFileView(BUCKET_ID, fileUploadRes.$id);
+
+        // 3. エディタブロックに画像を配置
         const temp = document.createElement('div');
-        renderBlocks([{ id: slashTargetBlock.dataset.id, type: 'image', content: ev.target.result, children:[] }], temp);
+        renderBlocks([{ id: slashTargetBlock.dataset.id, type: 'image', content: fileUrl, children:[] }], temp);
         slashTargetBlock.replaceWith(temp.firstElementChild);
         saveEditorState(true); reinitSortables(); this.value = '';
-    };
-    reader.readAsDataURL(file);
+    } catch (err) {
+        alert("画像のアップロードに失敗しました: " + err.message);
+        console.error(err);
+    }
 });
+
+// 画像圧縮ヘルパー関数
+function compressImage(file, maxWidth, quality) {
+    return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = (event) => {
+            const img = new Image();
+            img.src = event.target.result;
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                let width = img.width;
+                let height = img.height;
+
+                if (width > maxWidth) {
+                    height = Math.round((height * maxWidth) / width);
+                    width = maxWidth;
+                }
+
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+
+                canvas.toBlob((blob) => {
+                    resolve(new File([blob], file.name, { type: 'image/jpeg', lastModified: Date.now() }));
+                }, 'image/jpeg', quality);
+            };
+        };
+    });
+}
 
 // ================= リッチテキスト Floating Menu =================
 const floatMenu = document.getElementById('floating-menu');
@@ -1000,7 +1070,6 @@ function openSearchModal() {
 document.getElementById('settings-btn').addEventListener('click', () => document.getElementById('settings-overlay').classList.remove('hidden'));
 document.getElementById('settings-close').addEventListener('click', () => document.getElementById('settings-overlay').classList.add('hidden'));
 
-// ホーム画面でのロックページ表示トグル
 document.getElementById('setting-show-locked')?.addEventListener('change', (e) => {
     localStorage.setItem('motion_show_locked_in_home', e.target.checked);
     if(state.currentPageId === 'home') renderHome();
@@ -1017,14 +1086,10 @@ document.querySelectorAll('input[name="theme"]').forEach(r => r.onchange = (e) =
 
 document.getElementById('btn-export')?.addEventListener('click', () => {
     const exportData = clone(state);
-    
-    // エクスポート用データのクリーンアップ
-    // （別アカウント等へ移行しやすいようにクラウド固有の内部IDやセッション情報を消去）
     Object.values(exportData.pages).forEach(p => {
         delete p.isUnlockedSession;
-        delete p.$id; // Appwriteの内部ドキュメントIDを削除
+        delete p.$id;
     });
-    
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportData));
     const dlAnchor = document.createElement('a'); 
     dlAnchor.setAttribute("href", dataStr); 
@@ -1041,30 +1106,21 @@ document.getElementById('file-import')?.addEventListener('change', async (e) => 
             const imported = JSON.parse(event.target.result);
             if(imported && imported.pages) {
                 alert("クラウドへのインポートを開始します。完了するまでブラウザを閉じないでください...");
-                
-                // 1. インポートされた各ページをAppwriteへ同期
                 for (const key of Object.keys(imported.pages)) {
                     const page = imported.pages[key];
                     const existing = state.pages[page.id];
-                    
-                    // 既に同じページが存在する場合はクラウド上の$idを引き継いで上書き、なければ新規作成
                     if (existing && existing.$id) {
                         page.$id = existing.$id; 
                     } else {
                         delete page.$id; 
                     }
-                    
-                    // Appwriteへ1件ずつ保存
                     await saveDataToAppwrite(page);
                 }
-                
-                // 2. UI状態（ツリー開閉や最近使ったページ履歴）のローカル保存
                 const uiState = {
                     expandedNodes: imported.expandedNodes || [],
                     recentPages: imported.recentPages || []
                 };
                 localStorage.setItem('motion_ui_state', JSON.stringify(uiState));
-
                 alert("復元が完了しました。ページを再読み込みします。");
                 location.reload();
             }
@@ -1076,12 +1132,10 @@ document.getElementById('file-import')?.addEventListener('change', async (e) => 
     reader.readAsText(file);
 });
 
-
 document.getElementById('btn-reset')?.addEventListener('click', async () => {
     if(confirm("【警告】全データを消去します。\nこの操作はクラウド(Appwrite)上のあなたのデータも完全に削除します。よろしいですか？")) {
         try {
             if (currentUser) {
-                // ログインユーザーの全ドキュメントを取得して削除
                 const response = await databases.listDocuments(DB_ID, COLLECTION_PAGES, [
                     Query.equal('$permissions', `read("user:${currentUser.$id}")`)
                 ]);
@@ -1089,7 +1143,6 @@ document.getElementById('btn-reset')?.addEventListener('click', async () => {
                     await databases.deleteDocument(DB_ID, COLLECTION_PAGES, doc.$id);
                 }
             }
-            // ローカルのUI状態・キャッシュ等もクリア
             localStorage.clear(); 
             location.reload();
         } catch (err) {
@@ -1110,7 +1163,7 @@ document.getElementById('editor-bottom-padding')?.addEventListener('click', () =
     }
 });
 
-// ================= モーダルの Enter キー決定処理 =================
+// モーダルの Enter キー決定処理
 document.getElementById('modal-pass')?.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); document.getElementById('modal-submit')?.click(); }
 });

@@ -31,8 +31,20 @@
         <h3 id="auth-title">ログイン</h3>
         <form id="auth-form" onsubmit="return false;" autocomplete="on">
             <!-- ★修正: value="user" を削除し placeholder="user" のみに調整 -->
-            <input type="text" id="auth-username" name="username" placeholder="user" autocomplete="username">
-            <input type="password" id="auth-password" name="password" placeholder="パスワード" value="pass" autocomplete="current-password">
+            <input 
+  type="text" 
+  id="auth-username" 
+  placeholder="ユーザー名を入力" 
+  autocomplete="username" 
+  required 
+/>
+            <input 
+  type="password" 
+  id="auth-password" 
+  placeholder="パスワードを入力" 
+  autocomplete="current-password" 
+  required 
+/>
             <button type="button" id="auth-submit-btn" class="primary-btn">ログイン</button>
             <button type="button" id="auth-toggle-btn" class="cancel-btn">アカウント作成へ切替</button>
         </form>

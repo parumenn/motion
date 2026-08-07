@@ -599,6 +599,10 @@ function openPage(id) {
     document.getElementById('empty-state').classList.add('hidden'); 
     document.getElementById('home-wrapper').classList.add('hidden');
     document.getElementById('editor-wrapper').classList.remove('hidden');
+
+    document.getElementById('editor-wrapper').classList.remove('fade-in-up');
+void document.getElementById('editor-wrapper').offsetWidth; // リフロー発生させてアニメーションを再トリガー
+document.getElementById('editor-wrapper').classList.add('fade-in-up');
     
     const page = state.pages[id];
     pageTitleEl.textContent = page.title || '';

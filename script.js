@@ -14,6 +14,7 @@ const COMMANDS = [
 let state = { pages: {}, rootPages: [], currentPageId: null, expandedNodes: [], recentPages: [] };
 let sortableInstances = [];
 
+
 // Undo/Redo 用履歴管理
 let historyStack = {}; 
 let historyIndex = {};
@@ -30,11 +31,11 @@ const client = new Client()
 
 const account = new Account(client);
 const databases = new Databases(client);
-const storage = new Storage(client);
+const storage = new Storage(client); // ★Storage追加
 
 const DB_ID = 'motion_db';
 const COLLECTION_PAGES = 'pages';
-const BUCKET_ID = 'motion_storage';
+const BUCKET_ID = 'motion_storage'; // ★ストレージバケットID
 
 let currentUser = null;
 
@@ -42,6 +43,7 @@ let currentUser = null;
 async function initApp() {
     applyTheme();
     
+    // 画像画質設定の復元
     const savedQuality = localStorage.getItem('motion_image_quality') || 'original';
     const qualitySelect = document.getElementById('setting-image-quality');
     if (qualitySelect) qualitySelect.value = savedQuality;
@@ -50,6 +52,7 @@ async function initApp() {
         currentUser = await account.get();
         document.getElementById('user-info-text').textContent = `ログイン中: ${currentUser.name} (${currentUser.email})`;
         
+        // UI状態の復元
         const savedUi = localStorage.getItem('motion_ui_state');
         if (savedUi) {
             const parsedUi = JSON.parse(savedUi);
@@ -60,16 +63,20 @@ async function initApp() {
         await loadDataFromAppwrite();
         renderTree();
         openPage('home');
+        
+        // ストレージ使用量の計算・表示
         calcStorageUsage();
     } catch (err) {
         showAuthModal();
     }
 }
 
+// 画質設定の保存イベント
 document.getElementById('setting-image-quality')?.addEventListener('change', (e) => {
     localStorage.setItem('motion_image_quality', e.target.value);
 });
 
+// アカウントタブを開いた時に使用量を再計算する
 document.querySelector('.settings-tab[data-tab="account"]')?.addEventListener('click', () => {
     calcStorageUsage();
 });
@@ -78,6 +85,7 @@ document.querySelector('.settings-tab[data-tab="account"]')?.addEventListener('c
 function calcStorageUsage() {
     let totalBytes = 0;
     Object.values(state.pages).forEach(page => {
+        // blocksが文字列の場合もあるため安全にJSON文字列化
         const blocksData = page.blocks || [];
         const pageString = typeof blocksData === 'string' ? blocksData : JSON.stringify(blocksData);
         totalBytes += new Blob([pageString]).size;
@@ -95,6 +103,7 @@ function calcStorageUsage() {
     }
 }
 
+// ダミーメール作成
 const usernameToEmail = (username) => `${username.toLowerCase()}@motion.local`;
 
 function showAuthModal() {
@@ -132,6 +141,7 @@ function showAuthModal() {
     };
 }
 
+// パスワード変更
 document.getElementById('btn-change-pass')?.addEventListener('click', async () => {
     const oldPass = document.getElementById('change-pass-old').value;
     const newPass = document.getElementById('change-pass-new').value;
@@ -147,6 +157,7 @@ document.getElementById('btn-change-pass')?.addEventListener('click', async () =
     }
 });
 
+// ログアウト
 document.getElementById('btn-logout')?.addEventListener('click', async () => {
     await account.deleteSession('current');
     location.reload();
@@ -155,30 +166,18 @@ document.getElementById('btn-logout')?.addEventListener('click', async () => {
 // ================= Appwrite データ同期 =================
 async function loadDataFromAppwrite() {
     try {
+        // クエリ条件を外して全ドキュメントを取得（ユーザーごとの判定はAppwrite側でセキュアに管理されます）
         const response = await databases.listDocuments(DB_ID, COLLECTION_PAGES);
 
         state.pages = {};
         state.rootPages = [];
 
         response.documents.forEach(doc => {
-            let parsedBlocks = doc.blocks;
-            if (typeof parsedBlocks === 'string') {
-                try {
-                    parsedBlocks = JSON.parse(parsedBlocks);
-                } catch (err) {
-                    parsedBlocks = [];
-                }
-            }
-            // 配列の重複や不正な多重ネストを防ぐため、最初の階層が壊れていないかサニタイズ
-            if (!Array.isArray(parsedBlocks)) {
-                parsedBlocks = [{ id: generateId(), type: 'p', content: '', children: [] }];
-            }
-
             state.pages[doc.pageId] = {
                 id: doc.pageId,
                 title: doc.title,
                 parentId: doc.parentId,
-                blocks: parsedBlocks,
+                blocks: typeof doc.blocks === 'string' ? JSON.parse(doc.blocks) : doc.blocks,
                 isLocked: doc.isLocked,
                 $id: doc.$id
             };
@@ -379,13 +378,8 @@ function renderTree() {
 document.getElementById('sidebar-toggle-btn').addEventListener('click', () => { sidebar.classList.add('open'); sidebarOverlay.classList.add('active'); });
 sidebarOverlay.addEventListener('click', () => { sidebar.classList.remove('open'); sidebarOverlay.classList.remove('active'); });
 document.getElementById('add-page-btn').addEventListener('click', () => {
-    const id = generateId(); 
-    state.pages[id] = { id, title: '', parentId: null, blocks: [{ id: generateId(), type: 'p', content: '', children: [] }] };
-    state.rootPages.push(id); 
-    saveData(); 
-    renderTree(); 
-    openPage(id); 
-    setTimeout(() => pageTitleEl.focus(), 10);
+    const id = generateId(); state.pages[id] = { id, title: '', parentId: null, blocks: [{ id: generateId(), type: 'p', content: '', children: [] }] };
+    state.rootPages.push(id); saveData(); renderTree(); openPage(id); setTimeout(() => pageTitleEl.focus(), 10);
 });
 
 document.getElementById('ctx-add-subpage')?.addEventListener('click', () => {
@@ -397,20 +391,37 @@ document.getElementById('ctx-add-subpage')?.addEventListener('click', () => {
 document.getElementById('ctx-delete-page')?.addEventListener('click', () => {
     contextMenuEl?.classList.add('hidden');
     if(confirm("このページと中のコンテンツを全て削除しますか？")) {
-        const deleteRecursive = (id) => {
-            Object.values(state.pages).filter(p => p.parentId === id).forEach(p => deleteRecursive(p.id));
+        const deleteRecursive = async (id) => {
+            // 子ページを再帰的に削除
+            const children = Object.values(state.pages).filter(p => p.parentId === id);
+            for (const child of children) {
+                await deleteRecursive(child.id);
+            }
+            
+            const page = state.pages[id];
+            if (page && page.$id && currentUser) {
+                try {
+                    // Appwriteサーバー上のドキュメントを削除
+                    await databases.deleteDocument(DB_ID, COLLECTION_PAGES, page.$id);
+                } catch (err) {
+                    console.error('Server delete error:', err);
+                }
+            }
+            
             delete state.pages[id]; 
             state.rootPages = state.rootPages.filter(rid => rid !== id);
             state.expandedNodes = state.expandedNodes.filter(rid => rid !== id);
             state.recentPages = state.recentPages.filter(rid => rid !== id);
         };
-        deleteRecursive(contextMenuTargetId);
-        saveData(); 
-        if(state.currentPageId === contextMenuTargetId) openPage('home');
-        else renderTree();
+
+        (async () => {
+            await deleteRecursive(contextMenuTargetId);
+            await saveData(); 
+            if(state.currentPageId === contextMenuTargetId) openPage('home');
+            else renderTree();
+        })();
     }
-});
-document.addEventListener('click', (e) => { if (!e.target.closest('#context-menu')) contextMenuEl?.classList.add('hidden'); });
+});document.addEventListener('click', (e) => { if (!e.target.closest('#context-menu')) contextMenuEl?.classList.add('hidden'); });
 
 function updateBreadcrumb(pageId) {
     const breadcrumbEl = document.getElementById('breadcrumb');
@@ -492,8 +503,7 @@ function openPage(id) {
     document.getElementById('editor-wrapper').classList.remove('hidden');
     
     const page = state.pages[id];
-    pageTitleEl.value = page.title || ''; 
-    document.getElementById('mobile-topbar-title').textContent = page.title || '無題';
+    pageTitleEl.value = page.title; document.getElementById('mobile-topbar-title').textContent = page.title || '無題';
     
     const lockBtn = document.getElementById('lock-btn');
     if (page.isLocked) { lockBtn.classList.add('locked'); document.getElementById('lock-text').textContent = 'ロックを解除'; }
@@ -560,78 +570,43 @@ document.getElementById('lock-btn')?.addEventListener('click', () => {
 
 // ================= エディタ描画と保存 =================
 function renderEditor(page) {
-    editorEl.innerHTML = ''; 
-    let blocks = page.blocks;
-    if (!blocks || !Array.isArray(blocks) || blocks.length === 0) {
-        blocks = [{ id: generateId(), type: 'p', content: '', children: [] }];
-        page.blocks = blocks;
-    }
-    renderBlocks(blocks, editorEl); 
-    reinitSortables();
+    editorEl.innerHTML = ''; let blocks = page.blocks;
+    if(!blocks || blocks.length === 0) blocks = [{ id: generateId(), type: 'p', content: '', children: [] }];
+    renderBlocks(blocks, editorEl); reinitSortables();
 }
 
 function renderBlocks(blockArray, container) {
-    // 重複IDや余分な要素の混入を防ぐための安全なレンダリング
     blockArray.forEach(blockData => {
-        const wrapper = document.createElement('div'); 
-        wrapper.className = 'block-wrapper'; 
-        wrapper.dataset.id = blockData.id; 
-        wrapper.dataset.type = blockData.type || 'p';
-        if(blockData.checked) wrapper.classList.add('checked'); 
-        if(blockData.toggleOpen) wrapper.classList.add('open');
+        const wrapper = document.createElement('div'); wrapper.className = 'block-wrapper'; wrapper.dataset.id = blockData.id; wrapper.dataset.type = blockData.type;
+        if(blockData.checked) wrapper.classList.add('checked'); if(blockData.toggleOpen) wrapper.classList.add('open');
 
-        const main = document.createElement('div'); 
-        main.className = 'block-main';
+        const main = document.createElement('div'); main.className = 'block-main';
         main.innerHTML = `<div class="drag-handle"><svg class="icon"><use href="#icon-grip"></use></svg></div>`;
         
-        if (blockData.type === 'todo') { 
-            const cb = document.createElement('div'); 
-            cb.className = 'todo-checkbox'; 
-            cb.onclick = () => { wrapper.classList.toggle('checked'); saveEditorState(true); }; 
-            main.appendChild(cb); 
-        }
-        if (blockData.type === 'toggle') { 
-            const tg = document.createElement('div'); 
-            tg.className = 'toggle-icon'; 
-            tg.innerHTML = '<svg class="icon"><use href="#icon-toggle"></use></svg>'; 
-            tg.onclick = () => { wrapper.classList.toggle('open'); saveEditorState(true); }; 
-            main.appendChild(tg); 
-        }
+        if (blockData.type === 'todo') { const cb = document.createElement('div'); cb.className = 'todo-checkbox'; cb.onclick = () => { wrapper.classList.toggle('checked'); saveEditorState(true); }; main.appendChild(cb); }
+        if (blockData.type === 'toggle') { const tg = document.createElement('div'); tg.className = 'toggle-icon'; tg.innerHTML = '<svg class="icon"><use href="#icon-toggle"></use></svg>'; tg.onclick = () => { wrapper.classList.toggle('open'); saveEditorState(true); }; main.appendChild(tg); }
 
-        const content = document.createElement('div'); 
-        content.className = 'block-content'; 
-        content.dataset.placeholder = "'/' または MarkDown記法 (#, [], >)";
+        const content = document.createElement('div'); content.className = 'block-content'; content.dataset.placeholder = "'/' または MarkDown記法 (#, [], >)";
         
         if (blockData.type === 'page_link') {
-            content.contentEditable = "false"; 
-            content.tabIndex = 0; 
-            content.dataset.linkId = blockData.content;
+            content.contentEditable = "false"; content.tabIndex = 0; content.dataset.linkId = blockData.content;
             const target = state.pages[blockData.content];
             content.innerHTML = target ? `📄 ${target.title || '無題'}` : `📄 削除されたページ`;
             if(target) content.onclick = () => openPage(blockData.content);
             content.addEventListener('keydown', handleNonTextKeydown);
         } else if (blockData.type === 'image') {
-            content.contentEditable = "false"; 
-            content.tabIndex = 0;
+            content.contentEditable = "false"; content.tabIndex = 0;
             content.innerHTML = `<img src="${blockData.content}" alt="画像">`;
             content.addEventListener('keydown', handleNonTextKeydown);
         } else {
-            content.contentEditable = "true"; 
-            content.innerHTML = blockData.content || '';
-            content.addEventListener('keydown', handleBlockKeydown); 
-            content.addEventListener('input', handleBlockInput); 
-            content.addEventListener('paste', handleBlockPaste);
+            content.contentEditable = "true"; content.innerHTML = blockData.content;
+            content.addEventListener('keydown', handleBlockKeydown); content.addEventListener('input', handleBlockInput); content.addEventListener('paste', handleBlockPaste);
         }
-        main.appendChild(content); 
-        wrapper.appendChild(main);
+        main.appendChild(content); wrapper.appendChild(main);
         
-        const childrenContainer = document.createElement('div'); 
-        childrenContainer.className = 'block-children';
-        if (blockData.children && Array.isArray(blockData.children) && blockData.children.length > 0) {
-            renderBlocks(blockData.children, childrenContainer);
-        }
-        wrapper.appendChild(childrenContainer); 
-        container.appendChild(wrapper);
+        const childrenContainer = document.createElement('div'); childrenContainer.className = 'block-children';
+        if (blockData.children?.length > 0) renderBlocks(blockData.children, childrenContainer);
+        wrapper.appendChild(childrenContainer); container.appendChild(wrapper);
     });
 }
 
@@ -665,14 +640,7 @@ function extractBlocks(container) {
         else if (contentEl) {
             content = DOMPurify.sanitize(contentEl.innerHTML, { ALLOWED_TAGS: ['a','br','b','strong','i','em','u','s','strike','span'], ALLOWED_ATTR: ['href','target','rel','style','class'] });
         }
-        return { 
-            id: wrapper.dataset.id, 
-            type, 
-            content, 
-            checked: wrapper.classList.contains('checked'), 
-            toggleOpen: wrapper.classList.contains('open'), 
-            children: extractBlocks(wrapper.querySelector(':scope > .block-children')) 
-        };
+        return { id: wrapper.dataset.id, type, content, checked: wrapper.classList.contains('checked'), toggleOpen: wrapper.classList.contains('open'), children: extractBlocks(wrapper.querySelector(':scope > .block-children')) };
     });
 }
 
@@ -948,6 +916,7 @@ function executeCommand(cmdId) {
     }
 }
 
+// リンク挿入ダイアログ処理
 document.getElementById('ext-link-cancel')?.addEventListener('click', () => {
     document.getElementById('ext-link-overlay').classList.add('hidden');
     if(pendingExtLinkBlock && savedCaretRange) {
@@ -992,11 +961,13 @@ document.getElementById('image-upload-input').addEventListener('change', async f
     const qualityMode = localStorage.getItem('motion_image_quality') || 'original';
     let fileToUpload = file;
 
+    // 容量削減モードの場合、canvasでリサイズ・圧縮を行う
     if (qualityMode === 'compressed') {
-        fileToUpload = await compressImage(file, 1200, 0.7);
+        fileToUpload = await compressImage(file, 1200, 0.7); // 最大幅1200px, 品質70%
     }
 
     try {
+        // 1. Appwrite Storage へファイルアップロード
         const fileUploadRes = await storage.createFile(
             BUCKET_ID,
             ID.unique(),
@@ -1007,8 +978,10 @@ document.getElementById('image-upload-input').addEventListener('change', async f
             ]
         );
 
+        // 2. Storageから閲覧用URLを取得
         const fileUrl = storage.getFileView(BUCKET_ID, fileUploadRes.$id);
 
+        // 3. エディタブロックに画像を配置
         const temp = document.createElement('div');
         renderBlocks([{ id: slashTargetBlock.dataset.id, type: 'image', content: fileUrl, children:[] }], temp);
         slashTargetBlock.replaceWith(temp.firstElementChild);
@@ -1019,6 +992,7 @@ document.getElementById('image-upload-input').addEventListener('change', async f
     }
 });
 
+// 画像圧縮ヘルパー関数
 function compressImage(file, maxWidth, quality) {
     return new Promise((resolve) => {
         const reader = new FileReader();
@@ -1123,7 +1097,7 @@ document.querySelectorAll('.settings-tab').forEach(tab => {
         tab.classList.add('active'); document.getElementById('tab-' + tab.dataset.tab).classList.remove('hidden');
     };
 });
-document.querySelectorAll('input[name="theme"]').forEach(r => r.onchange = (e) => { localStorage.setItem('local_workspace_theme', r.value); applyTheme(); });
+document.querySelectorAll('input[name="theme"]').forEach(r => r.onchange = (e) => { localStorage.setItem('local_workspace_theme', e.target.value); applyTheme(); });
 
 document.getElementById('btn-export')?.addEventListener('click', () => {
     const exportData = clone(state);
@@ -1177,7 +1151,9 @@ document.getElementById('btn-reset')?.addEventListener('click', async () => {
     if(confirm("【警告】全データを消去します。\nこの操作はクラウド(Appwrite)上のあなたのデータも完全に削除します。よろしいですか？")) {
         try {
             if (currentUser) {
-                const response = await databases.listDocuments(DB_ID, COLLECTION_PAGES);
+                const response = await databases.listDocuments(DB_ID, COLLECTION_PAGES, [
+                    Query.equal('$permissions', `read("user:${currentUser.$id}")`)
+                ]);
                 for (const doc of response.documents) {
                     await databases.deleteDocument(DB_ID, COLLECTION_PAGES, doc.$id);
                 }
@@ -1202,6 +1178,7 @@ document.getElementById('editor-bottom-padding')?.addEventListener('click', () =
     }
 });
 
+// モーダルの Enter キー決定処理
 document.getElementById('modal-pass')?.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); document.getElementById('modal-submit')?.click(); }
 });

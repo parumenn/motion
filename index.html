@@ -34,21 +34,6 @@
     </div>
 </div>
 
-<!-- 設定モーダル内のアカウント管理用タブ追加 -->
-<!-- <div class="settings-tab" data-tab="account">アカウント</div> 内に追加 -->
-<div id="tab-account" class="tab-pane hidden">
-    <h3>アカウント設定</h3>
-    <p class="modal-desc" id="user-info-text">ログイン中: -</p>
-    
-    <h4 style="margin-top:16px;">ストレージ使用量</h4>
-    <p id="storage-usage-text" class="modal-desc" style="text-align:left;">計算中...</p>
-
-    <h4 style="margin-top:16px;">パスワード変更</h4>
-    <input type="password" id="change-pass-old" placeholder="現在のパスワード">
-    <input type="password" id="change-pass-new" placeholder="新しいパスワード">
-    <button id="btn-change-pass" class="primary-btn">パスワード更新</button>
-    <button id="btn-logout" class="danger-btn" style="margin-top:24px;">ログアウト</button>
-</div>
 
 
     <nav id="sidebar">
@@ -176,6 +161,20 @@
     <h3 style="margin-top:24px;">ホーム画面</h3>
     <label><input type="checkbox" id="setting-show-locked"> ロックされたページを「最近使ったページ」に表示する</label>
 </div>
+<div id="tab-account" class="tab-pane hidden">
+    <h3>アカウント設定</h3>
+    <p class="modal-desc" id="user-info-text">ログイン中: -</p>
+    
+    <h4 style="margin-top:16px;">ストレージ使用量</h4>
+    <p id="storage-usage-text" class="modal-desc" style="text-align:left;">計算中...</p>
+
+    <h4 style="margin-top:16px;">パスワード変更</h4>
+    <input type="password" id="change-pass-old" placeholder="現在のパスワード">
+    <input type="password" id="change-pass-new" placeholder="新しいパスワード">
+    <button id="btn-change-pass" class="primary-btn">パスワード更新</button>
+    <button id="btn-logout" class="danger-btn" style="margin-top:24px;">ログアウト</button>
+</div>
+
 
                 <div id="tab-data" class="tab-pane hidden">
                     <h3>データ管理</h3>

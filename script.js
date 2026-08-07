@@ -456,6 +456,7 @@ async function loadDataFromAppwrite() {
 
 async function createPageInAppwrite(page) {
     if (!currentUser) return;
+    
     const payload = {
         pageId: page.id,
         title: page.title || '',
@@ -464,9 +465,9 @@ async function createPageInAppwrite(page) {
         isLocked: page.isLocked || false
     };
 
-    // 💡 修正箇所：ドキュメントレベルでは read, update, delete のみを指定する
+    // 💡 修正：read権限も「作成したユーザー本人」だけに制限する
     const permissions = [
-        Permission.read(Role.any()),
+        Permission.read(Role.user(currentUser.$id)),   // ← Role.any() から変更
         Permission.update(Role.user(currentUser.$id)),
         Permission.delete(Role.user(currentUser.$id))
     ];
@@ -476,7 +477,6 @@ async function createPageInAppwrite(page) {
         page.$id = doc.$id;
     } catch (e) {
         console.error('Create page error:', e);
-        alert('ページの保存に失敗しました: ' + e.message); // デバッグ用にエラーを表示すると安心です
     }
 }
 

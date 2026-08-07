@@ -166,10 +166,8 @@ document.getElementById('btn-logout')?.addEventListener('click', async () => {
 // ================= Appwrite データ同期 =================
 async function loadDataFromAppwrite() {
     try {
-        // 必要に応じて Query の絞り込みを調整可能（データが取得できない場合は [] にしてください）
-        const response = await databases.listDocuments(DB_ID, COLLECTION_PAGES, [
-            Query.equal('$permissions', `read("user:${currentUser.$id}")`)
-        ]);
+        // クエリ条件を外して全ドキュメントを取得（ユーザーごとの判定はAppwrite側でセキュアに管理されます）
+        const response = await databases.listDocuments(DB_ID, COLLECTION_PAGES);
 
         state.pages = {};
         state.rootPages = [];

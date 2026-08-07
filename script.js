@@ -217,7 +217,7 @@ async function createPageInAppwrite(page) {
         isLocked: page.isLocked || false
     };
     const permissions = [
-        Permission.read(Role.user(currentUser.$id)),
+        Permission.read(Role.any()),
         Permission.write(Role.user(currentUser.$id))
     ];
 
@@ -579,8 +579,18 @@ pageTitleEl.addEventListener('input', (e) => {
     }, 200);
 });
 
+// タイトル行でEnterを押したら本文（最初のブロック）にフォーカスする処理
 pageTitleEl.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') { e.preventDefault(); const firstBlock = document.querySelector('#editor .block-content'); if (firstBlock) firstBlock.focus(); }
+    if (e.key === 'Enter') { 
+        e.preventDefault(); 
+        const firstBlock = document.querySelector('#editor .block-content'); 
+        if (firstBlock) {
+            firstBlock.focus();
+            if (firstBlock.contentEditable === "true") {
+                setCaretPosition(firstBlock, 0);
+            }
+        }
+    }
 });
 
 const overlayIds = ['overlay', 'search-overlay', 'link-overlay', 'ext-link-overlay', 'settings-overlay'];
@@ -703,17 +713,54 @@ function renderBlocks(blockArray, container) {
     });
 }
 
+// 非テキスト（画像やページリンク）ブロックでのキーボード操作ハンドラ（上下移動の確実化）
 function handleNonTextKeydown(e) {
     const wrapper = e.target.closest('.block-wrapper');
-    if(e.key === 'Backspace' || e.key === 'Delete') { 
-        e.preventDefault(); const prev = wrapper.previousElementSibling; wrapper.remove(); saveEditorState(true); 
-        if(prev) { const pc = prev.querySelector('.block-content'); if(pc) { pc.focus(); if(pc.contentEditable==="true") setCaretPosition(pc, pc.textContent.length); } }
+    if (e.key === 'Backspace' || e.key === 'Delete') { 
+        e.preventDefault(); 
+        const prev = wrapper.previousElementSibling; 
+        wrapper.remove(); 
+        saveEditorState(true); 
+        if (prev) { 
+            const pc = prev.querySelector('.block-content'); 
+            if (pc) { 
+                pc.focus(); 
+                if (pc.contentEditable === "true") setCaretPosition(pc, pc.textContent.length); 
+            } 
+        }
     } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
-        e.preventDefault(); const prev = wrapper.previousElementSibling;
-        if(prev) { const pc = prev.querySelector('.block-content'); pc.focus(); if(pc.contentEditable==="true") setCaretPosition(pc, pc.textContent.length); }
-    } else if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
-        e.preventDefault(); const next = wrapper.nextElementSibling;
-        if(next) { const nc = next.querySelector('.block-content'); nc.focus(); if(nc.contentEditable==="true") setCaretPosition(nc, 0); }
+        e.preventDefault(); 
+        const prev = wrapper.previousElementSibling;
+        if (prev && prev.classList.contains('block-wrapper')) { 
+            const pc = prev.querySelector('.block-content'); 
+            if (pc) {
+                pc.focus(); 
+                if (pc.contentEditable === "true") setCaretPosition(pc, pc.textContent.length); 
+            }
+        } else {
+            // 最上部ならタイトルへ戻る
+            pageTitleEl.focus();
+        }
+    } else if (e.key === 'ArrowDown' || e.key === 'ArrowRight' || e.key === 'Enter') {
+        e.preventDefault(); 
+        const next = wrapper.nextElementSibling;
+        if (next && next.classList.contains('block-wrapper')) { 
+            const nc = next.querySelector('.block-content'); 
+            if (nc) {
+                nc.focus(); 
+                if (nc.contentEditable === "true") setCaretPosition(nc, 0); 
+            }
+        } else if (e.key === 'Enter') {
+            // 画像などの下でEnterを押したら新しい段落を作る
+            const newBlockWrapper = document.createElement('div');
+            const newId = generateId();
+            renderBlocks([{ id: newId, type: 'p', content: '', children: [] }], newBlockWrapper);
+            wrapper.after(newBlockWrapper.firstElementChild);
+            const nc = wrapper.nextElementSibling.querySelector('.block-content');
+            if (nc) nc.focus();
+            saveEditorState(true);
+            reinitSortables();
+        }
     }
 }
 
@@ -877,31 +924,35 @@ function handleBlockKeydown(e) {
             } else { nextWrapper.remove(); saveEditorState(true); }
         }
     }
-    else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
-        if (offset === 0 || e.key === 'ArrowUp') {
-            const allContents = getVisibleContents(); const idx = allContents.indexOf(contentEl);
+    else if (e.key === 'ArrowUp') {
+        if (offset === 0 || contentEl.textContent === '') {
+            const allContents = getVisibleContents(); 
+            const idx = allContents.indexOf(contentEl);
             if (idx > 0) {
-                if(e.key === 'ArrowLeft' || contentEl.textContent === '') {
-                    e.preventDefault(); const prev = allContents[idx - 1]; prev.focus(); 
-                    if(prev.contentEditable==="true") setCaretPosition(prev, prev.textContent.length);
-                }
+                e.preventDefault(); 
+                const prev = allContents[idx - 1]; 
+                prev.focus(); 
+                if (prev.contentEditable === "true") setCaretPosition(prev, prev.textContent.length);
+            } else if (idx === 0) {
+                e.preventDefault();
+                pageTitleEl.focus();
             }
         }
     }
-    else if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
-        if (offset === textLen || e.key === 'ArrowDown') {
-            const allContents = getVisibleContents(); const idx = allContents.indexOf(contentEl);
+    else if (e.key === 'ArrowDown') {
+        if (offset === textLen || contentEl.textContent === '') {
+            const allContents = getVisibleContents(); 
+            const idx = allContents.indexOf(contentEl);
             if (idx < allContents.length - 1) {
-                if(e.key === 'ArrowRight' || contentEl.textContent === '') {
-                    e.preventDefault(); const next = allContents[idx + 1]; next.focus(); 
-                    if(next.contentEditable==="true") setCaretPosition(next, 0);
-                }
+                e.preventDefault(); 
+                const next = allContents[idx + 1]; 
+                next.focus(); 
+                if (next.contentEditable === "true") setCaretPosition(next, 0);
             }
         }
     }
 }
 
-// ================= クリップボードからの画像ペースト（Ctrl + V）対応 =================
 function handleBlockPaste(e) {
     const clipboardData = e.clipboardData || window.clipboardData;
     const items = clipboardData.items;
@@ -918,7 +969,6 @@ function handleBlockPaste(e) {
         }
     }
 
-    // 画像以外の場合は通常のテキスト処理
     e.preventDefault();
     const pastedText = clipboardData.getData('text/plain');
     const sel = window.getSelection();
@@ -1087,7 +1137,7 @@ document.getElementById('link-submit')?.addEventListener('click', () => {
     document.getElementById('link-overlay').classList.add('hidden');
 });
 
-// ================= 画像アップロード (Appwrite Storage 確実保存対応) =================
+// ================= 画像アップロード =================
 document.getElementById('image-upload-input').addEventListener('change', async function(e) {
     const file = e.target.files[0]; 
     if(!file || !slashTargetBlock) return;
@@ -1105,8 +1155,7 @@ async function uploadAndInsertImage(file, targetBlock) {
     }
 
     try {
-        // AppwriteのStorage仕様に準拠した安全なファイルオブジェクトの生成
-        const safeName = `img_${Date.now()}_${Math.random().toString(36.2, 9).substring(2, 7)}.jpg`;
+        const safeName = `img_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.jpg`;
         const uploadFile = new File([fileToUpload], safeName, { type: fileToUpload.type || 'image/jpeg' });
 
         const fileUploadRes = await storage.createFile(
@@ -1119,7 +1168,6 @@ async function uploadAndInsertImage(file, targetBlock) {
             ]
         );
 
-        // ストレージからの画像プレビューURL取得
         const fileUrl = storage.getFileView(BUCKET_ID, fileUploadRes.$id);
 
         const temp = document.createElement('div');

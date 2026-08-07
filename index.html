@@ -162,23 +162,8 @@
                 <div class="settings-tab hidden" id="tab-btn-admin" data-tab="admin" style="color:var(--accent); font-weight:600;">ユーザー管理</div>
             </div>
             <div class="settings-content">
-               <!-- (中略:既存のタブペインはそのまま) -->
-
-               <!-- ★ 管理者専用タブのコンテンツ -->
-               <div id="tab-admin" class="tab-pane hidden">
-                    <h3>ユーザー承認管理</h3>
-                    <p class="modal-desc" style="text-align:left;">承認待ちのユーザー一覧です。</p>
-                    <div id="admin-pending-users-list" style="margin-top:12px;">
-                        <p style="font-size:13px; color:var(--text-muted);">読み込み中...</p>
-                    </div>
-                </div>
-                
-                <div id="tab-danger" class="tab-pane hidden">
-                    <h3>危険な操作</h3><button id="btn-reset" class="danger-btn">ファクトリーリセット</button>
-                </div>
-            </div>
-            <div class="settings-content">
-               <div id="tab-appearance" class="tab-pane active">
+                <!-- 外観・一般 -->
+                <div id="tab-appearance" class="tab-pane active">
                     <h3>テーマ</h3>
                     <label><input type="radio" name="theme" value="light"> ライトモード</label><br>
                     <label><input type="radio" name="theme" value="dark"> ダークモード</label>
@@ -195,7 +180,7 @@
                     <label><input type="checkbox" id="setting-show-locked"> ロックされたページを「最近使ったページ」に表示する</label>
                 </div>
                 
-                <!-- ★ アカウントタブ (ストレージ使用量プログレスバー追加) -->
+                <!-- アカウント -->
                 <div id="tab-account" class="tab-pane hidden">
                     <h3>アカウント設定</h3>
                     <p class="modal-desc" id="user-info-text">ログイン中: -</p>
@@ -214,6 +199,7 @@
                     <button id="btn-logout" class="danger-btn" style="margin-top:24px;">ログアウト</button>
                 </div>
 
+                <!-- データ管理 -->
                 <div id="tab-data" class="tab-pane hidden">
                     <h3>データ管理</h3>
                     <p class="modal-desc" style="text-align:left;">大容量のIndexedDBに保存されています。</p>
@@ -227,9 +213,20 @@
                         <div id="sync-status" style="font-size:12px; margin-top:8px; color:var(--text-muted);">未同期</div>
                     </div>
                 </div>
-                
+
+                <!-- 危険な操作 -->
                 <div id="tab-danger" class="tab-pane hidden">
-                    <h3>危険な操作</h3><button id="btn-reset" class="danger-btn">ファクトリーリセット</button>
+                    <h3>危険な操作</h3>
+                    <button id="btn-reset" class="danger-btn">ファクトリーリセット</button>
+                </div>
+
+                <!-- 管理者専用タブ -->
+                <div id="tab-admin" class="tab-pane hidden">
+                    <h3>ユーザー承認管理</h3>
+                    <p class="modal-desc" style="text-align:left;">承認待ちのユーザー一覧です。</p>
+                    <div id="admin-pending-users-list" style="margin-top:12px;">
+                        <p style="font-size:13px; color:var(--text-muted);">読み込み中...</p>
+                    </div>
                 </div>
             </div>
         </div>

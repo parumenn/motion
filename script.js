@@ -267,7 +267,7 @@ function showAuthModal() {
                 // 1. Appwriteにアカウントを作成
                 const newUser = await account.create(ID.unique(), email, pass);
                 
-                // 2. データベースに「承認待ち」として登録（パーミッション付き）
+                // 2. データベースに「承認待ち」として登録（create("any") を削除）
                 await databases.createDocument(
                     DB_ID, 
                     'users', 
@@ -279,8 +279,8 @@ function showAuthModal() {
                     [
                         Permission.read(Role.any()),
                         Permission.update(Role.user(newUser.$id)),
-                        Permission.delete(Role.user(newUser.$id)),
-                        Permission.create(Role.any()) // ← ここで誰でも作成を許可する
+                        Permission.delete(Role.user(newUser.$id))
+                        // ※ create("any") はコレクション側の設定で賄うためここからは削除します
                     ]
                 );
                 

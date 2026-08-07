@@ -125,8 +125,17 @@
     <div id="slash-menu" class="hidden"></div>
     <input type="file" id="image-upload-input" accept="image/*" style="display:none;">
 
-    <!-- モーダル群 -->
-    <div id="overlay" class="hidden"><div class="modal" id="modal-box"><h3 id="modal-title">ページはロックされています</h3><p class="modal-desc">パスワードを入力して解除してください</p><input type="password" id="modal-pass" placeholder="パスワード"><button id="modal-submit" class="primary-btn">解除</button><button id="modal-cancel" class="cancel-btn">キャンセル</button></div></div>
+
+    <!-- パスワード入力モーダル -->
+<div id="overlay" class="hidden">
+    <div class="modal" id="modal-box">
+        <h3 id="modal-title">ページはロックされています</h3>
+        <p class="modal-desc">パスワードを入力して解除してください</p>
+        <input type="password" id="modal-pass" placeholder="パスワード" autocomplete="current-password">
+        <button id="modal-submit" class="primary-btn">解除</button>
+        <button id="modal-cancel" class="cancel-btn">キャンセル</button>
+    </div>
+</div>
     
     <div id="search-overlay" class="hidden"><div class="modal search-modal"><input type="text" id="search-input" placeholder="タイトルや内容を検索 (Escで閉じる)"><div id="search-results" class="search-results"></div></div></div>
     

@@ -73,24 +73,41 @@ document.querySelector('.settings-tab[data-tab="account"]')?.addEventListener('c
     calcStorageUsage();
 });
 
-function calcStorageUsage() {
-    let totalBytes = 0;
-    Object.values(state.pages).forEach(page => {
-        const blocksData = page.blocks || [];
-        const pageString = typeof blocksData === 'string' ? blocksData : JSON.stringify(blocksData);
-        totalBytes += new Blob([pageString]).size;
-    });
+function formatBytes(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    if (bytes < 1024) return `${bytes} Bytes`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+}
 
+async function calcStorageUsage() {
     const usageText = document.getElementById('storage-usage-text');
     if (!usageText) return;
 
-    if (totalBytes < 1024) {
-        usageText.textContent = `テキストデータ使用量: ${totalBytes} Bytes`;
-    } else if (totalBytes < 1024 * 1024) {
-        usageText.textContent = `テキストデータ使用量: ${(totalBytes / 1024).toFixed(2)} KB`;
-    } else {
-        usageText.textContent = `テキストデータ使用量: ${(totalBytes / (1024 * 1024)).toFixed(2)} MB`;
+    // 1. テキストデータ（ページ・ブロック）使用量の計算
+    let textBytes = 0;
+    Object.values(state.pages).forEach(page => {
+        const blocksData = page.blocks || [];
+        const pageString = typeof blocksData === 'string' ? blocksData : JSON.stringify(blocksData);
+        textBytes += new Blob([pageString]).size;
+    });
+
+    // テキスト使用量を即座に反映（添付ファイルは計算中を表示）
+    usageText.innerHTML = `テキストデータ使用量: ${formatBytes(textBytes)}<br>添付ファイル使用量: 計算中...`;
+
+    // 2. 添付ファイル（Appwrite Storage）使用量の計算
+    let mediaBytes = 0;
+    try {
+        if (currentUser) {
+            const fileList = await storage.listFiles(BUCKET_ID);
+            mediaBytes = fileList.files.reduce((sum, file) => sum + (file.sizeOriginal || 0), 0);
+        }
+    } catch (err) {
+        console.error("ストレージ使用量取得エラー:", err);
     }
+
+    // 両方の使用量を表示
+    usageText.innerHTML = `テキストデータ使用量: ${formatBytes(textBytes)}<br>添付ファイル使用量: ${formatBytes(mediaBytes)}`;
 }
 
 const usernameToEmail = (username) => `${username.toLowerCase()}@motion.local`;

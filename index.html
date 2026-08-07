@@ -27,8 +27,8 @@
 <div id="auth-overlay" class="hidden">
     <div class="modal">
         <h3 id="auth-title">ログイン</h3>
-        <input type="text" id="auth-username" placeholder="ユーザー名 (半角英数字)">
-<input type="password" id="auth-password" placeholder="パスワード (8文字以上)">
+        <input type="text" id="auth-username" placeholder="ユーザー名 (例: Parumenn)" value="Parumenn">
+        <input type="password" id="auth-password" placeholder="パスワード" value="itigo11111">
         <button id="auth-submit-btn" class="primary-btn">ログイン</button>
         <button id="auth-toggle-btn" class="cancel-btn">アカウント作成へ切替</button>
     </div>
@@ -39,6 +39,10 @@
 <div id="tab-account" class="tab-pane hidden">
     <h3>アカウント設定</h3>
     <p class="modal-desc" id="user-info-text">ログイン中: -</p>
+    
+    <h4 style="margin-top:16px;">ストレージ使用量</h4>
+    <p id="storage-usage-text" class="modal-desc" style="text-align:left;">計算中...</p>
+
     <h4 style="margin-top:16px;">パスワード変更</h4>
     <input type="password" id="change-pass-old" placeholder="現在のパスワード">
     <input type="password" id="change-pass-new" placeholder="新しいパスワード">
@@ -156,13 +160,23 @@
                 <div class="settings-tab" data-tab="danger">危険な操作</div>
             </div>
             <div class="settings-content">
-                <div id="tab-appearance" class="tab-pane active">
-                    <h3>テーマ</h3>
-                    <label><input type="radio" name="theme" value="light"> ライトモード</label><br>
-                    <label><input type="radio" name="theme" value="dark"> ダークモード</label>
-                    <h3 style="margin-top:24px;">ホーム画面</h3>
-                    <label><input type="checkbox" id="setting-show-locked"> ロックされたページを「最近使ったページ」に表示する</label>
-                </div>
+               <div id="tab-appearance" class="tab-pane active">
+    <h3>テーマ</h3>
+    <label><input type="radio" name="theme" value="light"> ライトモード</label><br>
+    <label><input type="radio" name="theme" value="dark"> ダークモード</label>
+    
+    <h3 style="margin-top:24px;">画像アップロード設定</h3>
+    <label>
+        <select id="setting-image-quality" style="padding:4px 8px; border-radius:4px; border:1px solid var(--border); background:transparent; color:var(--text-main);">
+            <option value="original">元画質で保存</option>
+            <option value="compressed">容量を削減して保存 (リサイズ)</option>
+        </select>
+    </label>
+
+    <h3 style="margin-top:24px;">ホーム画面</h3>
+    <label><input type="checkbox" id="setting-show-locked"> ロックされたページを「最近使ったページ」に表示する</label>
+</div>
+
                 <div id="tab-data" class="tab-pane hidden">
                     <h3>データ管理</h3>
                     <p class="modal-desc" style="text-align:left;">大容量のIndexedDBに保存されています。</p>

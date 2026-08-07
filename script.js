@@ -267,7 +267,8 @@ function showAuthModal() {
                 // 1. Appwriteにアカウントを作成
                 const newUser = await account.create(ID.unique(), email, pass);
                 
-                // 2. データベースに「承認待ち」として登録（create("any") を削除）
+                // 2. データベースに「承認待ち」として登録
+                // ※ 第5引数のパーミッション指定を削除し、コンソール側の設定（any/guestsのCreate許可）に任せます
                 await databases.createDocument(
                     DB_ID, 
                     'users', 
@@ -275,13 +276,7 @@ function showAuthModal() {
                     { 
                         email: email, 
                         status: 'pending' 
-                    },
-                    [
-                        Permission.read(Role.any()),
-                        Permission.update(Role.user(newUser.$id)),
-                        Permission.delete(Role.user(newUser.$id))
-                        // ※ create("any") はコレクション側の設定で賄うためここからは削除します
-                    ]
+                    }
                 );
                 
                 // 3. 管理者へメール通知（擬似）

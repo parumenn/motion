@@ -463,11 +463,12 @@ async function createPageInAppwrite(page) {
         blocks: JSON.stringify(page.blocks),
         isLocked: page.isLocked || false
     };
-   const permissions = [
+
+    // 💡 修正箇所：ドキュメントレベルでは read, update, delete のみを指定する
+    const permissions = [
         Permission.read(Role.any()),
-        Permission.write(Role.user(currentUser.$id)),
-        // もし新規作成時にエラーが出る場合は、create権限をanyにするか、ログイン後に実行する
-        Permission.create(Role.any()) 
+        Permission.update(Role.user(currentUser.$id)),
+        Permission.delete(Role.user(currentUser.$id))
     ];
 
     try {
@@ -475,6 +476,7 @@ async function createPageInAppwrite(page) {
         page.$id = doc.$id;
     } catch (e) {
         console.error('Create page error:', e);
+        alert('ページの保存に失敗しました: ' + e.message); // デバッグ用にエラーを表示すると安心です
     }
 }
 

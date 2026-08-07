@@ -79,22 +79,26 @@ async function initApp() {
     if (qualitySelect) qualitySelect.value = savedQuality;
 
     try {
+        // 1. まずログイン中のユーザー情報を取得（未ログインならcatchへ飛んでログインモーダルを表示）
+        currentUser = await account.get();
+        
+        // 2. アカウントの承認ステータスチェック
+        try {
             const userDoc = await databases.getDocument(DB_ID, 'users', currentUser.$id);
             if (userDoc.status !== 'approved') {
                 await account.deleteSession('current');
                 currentUser = null;
                 alert('アカウントは現在管理者の承認待ちです。承認されるまでアクセスできません。');
                 showAuthModal();
-                return; // 処理をここで完全にストップし、無限ループを防ぐ
+                return;
             }
         } catch (err) {
             await account.deleteSession('current');
             currentUser = null;
             alert('アカウントの承認情報が取得できません。承認待ちか、登録が未完了です。');
             showAuthModal();
-            return; // 処理をここで完全にストップし、無限ループを防ぐ
+            return;
         }
-        // ---------------------------------------------------
 
         document.getElementById('user-info-text').textContent = `ログイン中: ${currentUser.name} (${currentUser.email})`;
         
@@ -123,6 +127,8 @@ async function initApp() {
         openPage('home');
         calcStorageUsage();
     } catch (err) {
+        // 未ログイン状態などのエラー時は確実にログインモーダルを表示する
+        currentUser = null;
         showAuthModal();
     }
 }

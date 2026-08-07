@@ -165,3 +165,25 @@ body { font-family: var(--font-family); color: var(--text-main); display: flex; 
     color: var(--text-muted, #9a9a97);
     pointer-events: none;
 }
+
+/* 画像ブロックのスタイル調整 */
+.block-wrapper[data-type="image"] .block-content {
+    display: inline-block;
+    cursor: pointer;
+    outline: none;
+    border-radius: 4px;
+    padding: 2px;
+    transition: box-shadow 0.2s ease;
+}
+
+/* 画像ブロックにフォーカスが当たった時の外枠 */
+.block-wrapper[data-type="image"] .block-content:focus {
+    box-shadow: 0 0 0 2px #2383e2;
+}
+
+.block-wrapper[data-type="image"] img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 4px;
+    display: block;
+}

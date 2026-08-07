@@ -1387,30 +1387,51 @@ floatMenu.addEventListener('mousedown', (e) => {
 // ================= 全文検索・設定等のその他のUI =================
 document.getElementById('search-btn').addEventListener('click', openSearchModal);
 function openSearchModal() {
-    const searchOverlay = document.getElementById('search-overlay'), searchInput = document.getElementById('search-input'), resultsEl = document.getElementById('search-results');
-    searchOverlay.classList.remove('hidden'); searchInput.value = ''; resultsEl.innerHTML = ''; searchInput.focus();
+    const searchOverlay = document.getElementById('search-overlay'), 
+          searchInput = document.getElementById('search-input'), 
+          resultsEl = document.getElementById('search-results');
+          
+    searchOverlay.classList.remove('hidden'); 
+    searchInput.value = ''; 
+    resultsEl.innerHTML = ''; 
+    searchInput.focus();
     
     searchInput.oninput = (e) => {
-        const q = e.target.value.toLowerCase(); resultsEl.innerHTML = '';
+        const q = e.target.value.toLowerCase(); 
+        resultsEl.innerHTML = '';
         if(!q) return;
+
         Object.values(state.pages).forEach(p => {
-            let match = false; let snippet = '';
-            if ((p.title||'無題').toLowerCase().includes(q)) match = true;
-            else {
+            // ★追加: ロック中かつ未解除のセッションであれば検索対象から除外
+            const lockedBy = isPageLocked(p.id);
+            if (lockedBy && !lockedBy.isUnlockedSession) return;
+
+            let match = false; 
+            let snippet = '';
+            
+            if ((p.title || '無題').toLowerCase().includes(q)) {
+                match = true;
+            } else {
                 const searchBlocks = (blocks) => {
                     for(let b of blocks) {
-                        if(b.content && typeof b.content==='string' && b.type!=='image' && b.type!=='page_link') {
+                        if(b.content && typeof b.content === 'string' && b.type !== 'image' && b.type !== 'page_link') {
                             const text = b.content.replace(/<[^>]+>/g, '').toLowerCase();
-                            if(text.includes(q)) { match = true; snippet = text.substring(Math.max(0, text.indexOf(q)-15), text.indexOf(q)+20) + '...'; return; }
+                            if(text.includes(q)) { 
+                                match = true; 
+                                snippet = text.substring(Math.max(0, text.indexOf(q) - 15), text.indexOf(q) + 20) + '...'; 
+                                return; 
+                            }
                         }
                         if(b.children) searchBlocks(b.children);
                     }
                 };
                 if(Array.isArray(p.blocks)) searchBlocks(p.blocks);
             }
+
             if(match) {
-                const div = document.createElement('div'); div.className = 'search-item';
-                div.innerHTML = `<strong>${p.title||'無題'}</strong><br><span style="font-size:12px;color:var(--text-muted);">${snippet}</span>`;
+                const div = document.createElement('div'); 
+                div.className = 'search-item';
+                div.innerHTML = `<strong>${p.title || '無題'}</strong><br><span style="font-size:12px;color:var(--text-muted);">${snippet}</span>`;
                 div.onclick = () => { searchOverlay.classList.add('hidden'); openPage(p.id); };
                 resultsEl.appendChild(div);
             }

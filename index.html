@@ -5,49 +5,43 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Motion</title>
     
-    <!-- ★追加: ファビコン設定 (絵文字 📝 ) -->
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📝</text></svg>">
-
-    <!-- フォント: Noto Sans JP -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
     
-    <!-- ライブラリ群: XSS防御, ソート, 暗号化, IndexedDB操作 -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
-
     <script src="https://cdn.jsdelivr.net/npm/appwrite@13.0.1"></script>
     
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 
-<!-- 認証モーダル（未ログイン時） -->
-<!-- ★修正: IDを login-overlay に変更（CSSの最前面・不透明化に追従） -->
+<!-- ★ 認証モーダル（画面分割デザイン） -->
 <div id="login-overlay" class="hidden">
-    <div class="modal">
-        <h3 id="auth-title">ログイン</h3>
-        <form id="auth-form" onsubmit="return false;" autocomplete="on">
-            <!-- ★修正: value="user" を削除し placeholder="user" のみに調整 -->
-            <input 
-  type="text" 
-  id="auth-username" 
-  placeholder="ユーザー名を入力" 
-  autocomplete="username" 
-  required 
-/>
-            <input 
-  type="password" 
-  id="auth-password" 
-  placeholder="パスワードを入力" 
-  autocomplete="current-password" 
-  required 
-/>
-            <button type="button" id="auth-submit-btn" class="primary-btn">ログイン</button>
-            <button type="button" id="auth-toggle-btn" class="cancel-btn">アカウント作成へ切替</button>
-        </form>
+    <div class="login-split-container">
+        <div class="login-hero">
+            <h1><svg class="icon" style="width:36px;height:36px;vertical-align:bottom;color:var(--accent);"><use href="#icon-page"></use></svg> Motion</h1>
+            <p>思考をシームレスに記録し、整理する<br>次世代ノートアプリ。</p>
+            <ul class="login-features">
+                <li><svg class="icon"><use href="#icon-page"></use></svg> マークダウンライクな直感的操作</li>
+                <li><svg class="icon"><use href="#icon-grip"></use></svg> ドラッグ＆ドロップで自在に整理</li>
+                <li><svg class="icon"><use href="#icon-lock"></use></svg> パスワード保護とクラウド同期</li>
+            </ul>
+        </div>
+        <div class="login-form-container">
+            <div class="modal" style="box-shadow:none; border:none; background:transparent; width:100%; max-width:320px;">
+                <h3 id="auth-title">ログイン</h3>
+                <form id="auth-form" onsubmit="return false;" autocomplete="on">
+                    <input type="text" id="auth-username" name="username" placeholder="ユーザー名" autocomplete="username">
+                    <input type="password" id="auth-password" name="password" placeholder="パスワード" autocomplete="current-password">
+                    <button type="button" id="auth-submit-btn" class="primary-btn">ログイン</button>
+                    <button type="button" id="auth-toggle-btn" class="cancel-btn">アカウント作成へ切替</button>
+                </form>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -56,7 +50,6 @@
             <span>Motion</span>
             <button id="search-btn" title="検索 (Ctrl+P)"><svg class="icon"><use href="#icon-search"></use></svg></button>
         </div>
-        <!-- ★追加: ホームボタン -->
         <div class="sidebar-home" id="btn-home">
             <svg class="icon"><use href="#icon-home"></use></svg> ホーム
         </div>
@@ -74,7 +67,6 @@
             <span class="mobile-title" id="mobile-topbar-title">Motion</span>
         </div>
 
-        <!-- ★追加: ホーム画面 -->
         <div class="home-wrapper" id="home-wrapper">
             <h1 class="home-title">こんにちは！</h1>
             <div class="home-section">
@@ -97,7 +89,6 @@
         <div id="empty-state" class="empty-state hidden">ページを選択または作成してください</div>
     </main>
 
-    <!-- リッチテキスト用フローティングメニュー -->
     <div id="floating-menu" class="hidden">
         <button data-cmd="bold" title="太字"><b>B</b></button>
         <button data-cmd="italic" title="斜体"><i>I</i></button>
@@ -132,7 +123,6 @@
         <button data-cmd="removeFormat" title="書式クリア">✕</button>
     </div>
 
-    <!-- コンテキストメニュー & スラッシュメニュー -->
     <div id="context-menu" class="hidden">
         <div class="menu-item" id="ctx-add-subpage">サブページを追加</div>
         <div class="menu-item delete" id="ctx-delete-page">ページを削除</div>
@@ -140,7 +130,6 @@
     <div id="slash-menu" class="hidden"></div>
     <input type="file" id="image-upload-input" accept="image/*" style="display:none;">
 
-    <!-- パスワード入力モーダル -->
 <div id="overlay" class="hidden">
     <div class="modal" id="modal-box">
         <h3 id="modal-title">ページはロックされています</h3>
@@ -165,40 +154,46 @@
             <button id="settings-close" class="close-icon-btn">×</button>
             <div class="settings-sidebar">
                 <div class="settings-tab active" data-tab="appearance">外観・一般</div>
-<div class="settings-tab" data-tab="account">アカウント</div>
+                <div class="settings-tab" data-tab="account">アカウント</div>
                 <div class="settings-tab" data-tab="data">データ管理</div>
                 <div class="settings-tab" data-tab="danger">危険な操作</div>
             </div>
             <div class="settings-content">
                <div id="tab-appearance" class="tab-pane active">
-    <h3>テーマ</h3>
-    <label><input type="radio" name="theme" value="light"> ライトモード</label><br>
-    <label><input type="radio" name="theme" value="dark"> ダークモード</label>
-    
-    <h3 style="margin-top:24px;">画像アップロード設定</h3>
-    <label>
-        <select id="setting-image-quality" style="padding:4px 8px; border-radius:4px; border:1px solid var(--border); background:transparent; color:var(--text-main);">
-            <option value="original">元画質で保存</option>
-            <option value="compressed">容量を削減して保存 (リサイズ)</option>
-        </select>
-    </label>
+                    <h3>テーマ</h3>
+                    <label><input type="radio" name="theme" value="light"> ライトモード</label><br>
+                    <label><input type="radio" name="theme" value="dark"> ダークモード</label>
+                    
+                    <h3 style="margin-top:24px;">画像アップロード設定</h3>
+                    <label>
+                        <select id="setting-image-quality" style="padding:4px 8px; border-radius:4px; border:1px solid var(--border); background:transparent; color:var(--text-main);">
+                            <option value="original">元画質で保存</option>
+                            <option value="compressed">容量を削減して保存 (リサイズ)</option>
+                        </select>
+                    </label>
 
-    <h3 style="margin-top:24px;">ホーム画面</h3>
-    <label><input type="checkbox" id="setting-show-locked"> ロックされたページを「最近使ったページ」に表示する</label>
-</div>
-<div id="tab-account" class="tab-pane hidden">
-    <h3>アカウント設定</h3>
-    <p class="modal-desc" id="user-info-text">ログイン中: -</p>
-    
-    <h4 style="margin-top:16px;">ストレージ使用量</h4>
-    <p id="storage-usage-text" class="modal-desc" style="text-align:left;">計算中...</p>
+                    <h3 style="margin-top:24px;">ホーム画面</h3>
+                    <label><input type="checkbox" id="setting-show-locked"> ロックされたページを「最近使ったページ」に表示する</label>
+                </div>
+                
+                <!-- ★ アカウントタブ (ストレージ使用量プログレスバー追加) -->
+                <div id="tab-account" class="tab-pane hidden">
+                    <h3>アカウント設定</h3>
+                    <p class="modal-desc" id="user-info-text">ログイン中: -</p>
+                    
+                    <h4 style="margin-top:16px;">ストレージ使用量</h4>
+                    <p id="storage-usage-text" class="modal-desc" style="text-align:left; margin-bottom:4px;">計算中...</p>
+                    <div class="storage-bar-container">
+                        <div id="storage-bar-fill" class="storage-bar-fill"></div>
+                    </div>
+                    <p id="storage-limit-text" class="modal-desc" style="text-align:right; font-size:12px; margin-top:4px;"></p>
 
-    <h4 style="margin-top:16px;">パスワード変更</h4>
-    <input type="password" id="change-pass-old" placeholder="現在のパスワード">
-    <input type="password" id="change-pass-new" placeholder="新しいパスワード">
-    <button id="btn-change-pass" class="primary-btn">パスワード更新</button>
-    <button id="btn-logout" class="danger-btn" style="margin-top:24px;">ログアウト</button>
-</div>
+                    <h4 style="margin-top:24px;">パスワード変更</h4>
+                    <input type="password" id="change-pass-old" placeholder="現在のパスワード">
+                    <input type="password" id="change-pass-new" placeholder="新しいパスワード">
+                    <button id="btn-change-pass" class="primary-btn">パスワード更新</button>
+                    <button id="btn-logout" class="danger-btn" style="margin-top:24px;">ログアウト</button>
+                </div>
 
                 <div id="tab-data" class="tab-pane hidden">
                     <h3>データ管理</h3>
@@ -213,6 +208,7 @@
                         <div id="sync-status" style="font-size:12px; margin-top:8px; color:var(--text-muted);">未同期</div>
                     </div>
                 </div>
+                
                 <div id="tab-danger" class="tab-pane hidden">
                     <h3>危険な操作</h3><button id="btn-reset" class="danger-btn">ファクトリーリセット</button>
                 </div>
@@ -220,7 +216,6 @@
         </div>
     </div>
 
-    <!-- SVG アイコン群 -->
     <svg style="display:none;">
         <symbol id="icon-menu" viewBox="0 0 24 24"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></symbol>
         <symbol id="icon-grip" viewBox="0 0 24 24"><path d="M8 6a2 2 0 1 1-4 0 2 2 0 0 1 4 0zM8 12a2 2 0 1 1-4 0 2 2 0 0 1 4 0zM8 18a2 2 0 1 1-4 0 2 2 0 0 1 4 0zM14 6a2 2 0 1 1-4 0 2 2 0 0 1 4 0zM14 12a2 2 0 1 1-4 0 2 2 0 0 1 4 0zM14 18a2 2 0 1 1-4 0 2 2 0 0 1 4 0z"/></symbol>
@@ -229,7 +224,6 @@
         <symbol id="icon-toggle" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></symbol>
         <symbol id="icon-settings" viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.56-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.73 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.06.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .43-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.49-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></symbol>
         <symbol id="icon-search" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></symbol>
-        <!-- ホームアイコン追加 -->
         <symbol id="icon-home" viewBox="0 0 24 24"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></symbol>
     </svg>
 

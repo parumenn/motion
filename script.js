@@ -964,6 +964,40 @@ function handleBlockKeydown(e) {
         if (e.shiftKey) { e.preventDefault(); insertNodeAtCaret(document.createElement('br')); saveEditorState(); return; }
         e.preventDefault();
         
+        const isEmpty = contentEl.textContent.trim() === '';
+
+        // ① Todo・Toggle・見出しなどの特殊ブロックで、空のまま Enter を押した場合
+        //   -> ブロックタイプを通常の段落 'p' に戻す（2回目のEnterで特殊ブロックを脱出）
+        if (isEmpty && wrapper.dataset.type !== 'p') {
+            wrapper.dataset.type = 'p';
+            const mainEl = wrapper.querySelector(':scope > .block-main');
+            
+            // チェックボックスやトグルアイコン等の装飾パーツを削除
+            mainEl?.querySelector('.todo-checkbox')?.remove();
+            mainEl?.querySelector('.toggle-icon')?.remove();
+            wrapper.classList.remove('checked', 'open');
+            
+            saveEditorState(true);
+            return;
+        }
+
+        // ② トグルの内側などの子要素（階層下）にいる空の 'p' ブロックで Enter を押した場合
+        //   -> 親トグルの外側（1階層上）に抜け出す
+        if (isEmpty) {
+            const parentChildren = wrapper.parentElement;
+            if (parentChildren && parentChildren.classList.contains('block-children')) {
+                const parentWrapper = parentChildren.closest('.block-wrapper');
+                if (parentWrapper) {
+                    parentWrapper.after(wrapper);
+                    contentEl.focus();
+                    saveEditorState(true);
+                    reinitSortables();
+                    return;
+                }
+            }
+        }
+
+        // --- 通常の改行・新規ブロック作成処理 ---
         const range = window.getSelection().getRangeAt(0);
         const preRange = document.createRange(); preRange.selectNodeContents(contentEl); preRange.setEnd(range.startContainer, range.startOffset);
         const postRange = document.createRange(); postRange.selectNodeContents(contentEl); postRange.setStart(range.endContainer, range.endOffset);

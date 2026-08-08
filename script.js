@@ -943,15 +943,49 @@ document.getElementById('lock-btn')?.addEventListener('click', () => {
             saveEditorState(true); openPage(state.currentPageId);
         }
     } else {
-        const pass = prompt("このページをロックするためのパスワードを入力してください:");
-        if (pass) {
-            page.isLocked = true; page.password = pass; page.isUnlockedSession = false;
+        // ▼▼ prompt() をやめ、カスタムモーダルを表示する ▼▼
+        const setupOverlay = document.getElementById('lock-setup-overlay');
+        const pass1 = document.getElementById('setup-pass-1');
+        const pass2 = document.getElementById('setup-pass-2');
+        
+        pass1.value = '';
+        pass2.value = '';
+        // 目のアイコンの状態もリセット(非表示状態へ)
+        [pass1, pass2].forEach(el => {
+            el.type = 'password';
+            const btn = document.querySelector(`.toggle-password-btn[data-target="${el.id}"] use`);
+            if(btn) btn.setAttribute('href', '#icon-eye');
+        });
+
+        setupOverlay.classList.remove('hidden');
+        pass1.focus();
+
+        // 決定ボタンの処理（1回だけ登録されるように一旦クリア）
+        const submitBtn = document.getElementById('setup-pass-submit');
+        submitBtn.onclick = () => {
+            if (!pass1.value) return alert('パスワードを入力してください');
+            if (pass1.value !== pass2.value) return alert('パスワードと確認用パスワードが一致しません');
+            
+            // ロック処理実行
+            page.isLocked = true; 
+            page.password = pass1.value; 
+            page.isUnlockedSession = false;
+            
             saveEditorState(true); 
-            const currentId = state.currentPageId; state.currentPageId = null;
-            document.getElementById('editor-wrapper').classList.add('hidden'); document.getElementById('empty-state').classList.remove('hidden');
+            const currentId = state.currentPageId; 
+            state.currentPageId = null;
+            document.getElementById('editor-wrapper').classList.add('hidden'); 
+            document.getElementById('empty-state').classList.remove('hidden');
             state.expandedNodes = state.expandedNodes.filter(id => !isPageLocked(id));
+            
+            setupOverlay.classList.add('hidden'); // モーダルを閉じる
             saveData().then(() => { renderTree(); openPage(currentId); });
-        }
+        };
+
+        // キャンセルボタンの処理
+        document.getElementById('setup-pass-cancel').onclick = () => {
+            setupOverlay.classList.add('hidden');
+        };
     }
 });
 

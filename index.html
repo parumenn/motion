@@ -150,16 +150,22 @@
     <div class="modal" id="modal-box">
         <h3 id="modal-title">ページはロックされています</h3>
         <p class="modal-desc">パスワードを入力して解除してください</p>
-        <!-- formタグをdivに変更 -->
+        
+        <!-- formタグを使わずdivにする -->
         <div id="lock-pass-form">
-            <!-- type="text"にしてChromeの検知を完全に回避し、CSSでパスワードっぽく見せる -->
-            <input type="text" id="modal-pass" placeholder="パスワード" autocomplete="off" style="-webkit-text-security: disc;">
+            <div class="password-input-wrapper">
+                <!-- type="text" にしてブラウザの自動入力を完全に回避 -->
+                <input type="text" id="modal-pass" placeholder="パスワード" autocomplete="off" style="-webkit-text-security: disc;">
+                <button type="button" class="toggle-password-btn" data-target="modal-pass" title="パスワードを表示">
+                    <svg class="icon"><use href="#icon-eye"></use></svg>
+                </button>
+            </div>
+            
             <button type="button" id="modal-submit" class="primary-btn">解除</button>
             <button type="button" id="modal-cancel" class="cancel-btn">キャンセル</button>
         </div>
     </div>
-</div>
-    
+</div>    
     <div id="search-overlay" class="hidden"><div class="modal search-modal"><input type="text" id="search-input" placeholder="タイトルや内容を検索 (Escで閉じる)"><div id="search-results" class="search-results"></div></div></div>
     
     <div id="link-overlay" class="hidden"><div class="modal"><h3>ページへリンク</h3><select id="link-select"></select><button id="link-submit" class="primary-btn">挿入</button><button id="link-cancel" class="cancel-btn">キャンセル</button></div></div>

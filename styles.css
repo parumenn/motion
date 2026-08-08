@@ -354,3 +354,43 @@ body.dark-mode #slash-menu, body.dark-mode #context-menu {
     background: var(--bg-hover); 
     color: var(--text-main); 
 }
+
+/* ================= パスワード入力と目のアイコン用スタイル ================= */
+.password-input-wrapper { 
+    position: relative; 
+    margin: 12px 0; 
+    display: flex;       /* flexboxで横幅を確実に制御 */
+    width: 100%;
+}
+
+.password-input-wrapper input { 
+    margin: 0 !important; 
+    /* 右側に目のアイコンを置くための余白（padding-right）を設ける */
+    padding-right: 40px !important; 
+    width: 100%;         /* 親要素いっぱいに広げる */
+    box-sizing: border-box; 
+}
+
+.toggle-password-btn {
+    position: absolute; 
+    /* 枠の中の右端に配置 */
+    right: 8px;          
+    top: 50%; 
+    transform: translateY(-50%);
+    background: transparent; 
+    border: none; 
+    cursor: pointer; 
+    color: var(--text-muted);
+    display: flex; 
+    align-items: center; 
+    justify-content: center; 
+    padding: 6px;
+    border-radius: 4px; 
+    transition: color 0.2s, background 0.2s;
+    z-index: 2; /* 入力欄より上に表示 */
+}
+
+.toggle-password-btn:hover { 
+    background: var(--bg-hover); 
+    color: var(--text-main); 
+}

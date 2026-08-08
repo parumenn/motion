@@ -259,499 +259,143 @@ const usernameToEmail = (username) => `${username.toLowerCase()}@motion.local`;
 
 let tempAuthData = null; // OTP検証用データ保持
 
-```javascript
 function showAuthModal() {
     const authOverlay = document.getElementById('login-overlay');
-    const authForm = document.getElementById('auth-form');
-    const authTitle = document.getElementById('auth-title');
 
-    if (!authOverlay || !authForm || !authTitle) {
-        console.error('認証モーダルのHTMLが見つかりません');
-        return;
+// パスワード表示切り替えイベントの設定
+    
+
+    if (!authOverlay) return;
+
+    const usernameInput = document.getElementById('auth-username');
+    const passwordInput = document.getElementById('auth-password');
+    const authSubmit = document.getElementById('auth-submit-btn');
+    const authToggle = document.getElementById('auth-toggle-btn');
+    const authForm = document.getElementById('auth-form');
+
+    // 6桁コード(OTP)入力用UIの動的追加
+    let otpContainer = document.getElementById('otp-container');
+    if (!otpContainer) {
+        otpContainer = document.createElement('div');
+        otpContainer.id = 'otp-container';
+        otpContainer.className = 'hidden';
+        otpContainer.innerHTML = `
+            <p style="font-size:14px; margin-bottom:12px; color:var(--text-main);">メールに送信された6桁の認証コードを入力してください。</p>
+            <input type="text" id="auth-otp" placeholder="6桁のコード" maxlength="6" style="margin-bottom:12px;">
+            <button type="button" id="auth-otp-submit" class="primary-btn">認証して申請</button>
+            <button type="button" id="auth-otp-cancel" class="cancel-btn">キャンセル</button>
+        `;
+        authForm.appendChild(otpContainer);
     }
 
-    // ========================================
-    // 認証フォームを生成
-    // ========================================
-    authForm.innerHTML = `
-        <input
-            type="email"
-            id="auth-username"
-            placeholder="メールアドレス"
-            autocomplete="email"
-        >
+    let inputsWrapper = document.getElementById('auth-inputs-wrapper');
+    if (!inputsWrapper) {
+        inputsWrapper = document.createElement('div');
+        inputsWrapper.id = 'auth-inputs-wrapper';
+        usernameInput.parentNode.insertBefore(inputsWrapper, usernameInput);
+        inputsWrapper.append(usernameInput, passwordInput, authSubmit, authToggle);
+    }
 
-        <div class="password-input-wrapper">
-            <input
-                type="password"
-                id="auth-password"
-                placeholder="パスワード"
-                autocomplete="current-password"
-            >
-            <button
-                type="button"
-                class="toggle-password-btn"
-                data-target="auth-password"
-                title="パスワードを表示"
-            >
-                <svg class="icon">
-                    <use href="#icon-eye"></use>
-                </svg>
-            </button>
-        </div>
-
-        <!-- パスワード確認欄 -->
-        <div
-            id="auth-password-confirm-wrapper"
-            class="password-input-wrapper hidden"
-        >
-            <input
-                type="password"
-                id="auth-password-confirm"
-                placeholder="パスワード（確認用）"
-                autocomplete="new-password"
-            >
-            <button
-                type="button"
-                class="toggle-password-btn"
-                data-target="auth-password-confirm"
-                title="パスワードを表示"
-            >
-                <svg class="icon">
-                    <use href="#icon-eye"></use>
-                </svg>
-            </button>
-        </div>
-
-        <button
-            type="button"
-            id="auth-submit-btn"
-            class="primary-btn"
-        >
-            ログイン
-        </button>
-
-        <button
-            type="button"
-            id="auth-toggle-btn"
-            class="cancel-btn"
-        >
-            アカウント作成へ切替
-        </button>
-
-        <div id="otp-container" class="hidden">
-            <p style="font-size:14px; margin-bottom:12px; color:var(--text-main);">
-                メールに送信された6桁の認証コードを入力してください。
-            </p>
-
-            <input
-                type="text"
-                id="auth-otp"
-                placeholder="6桁のコード"
-                maxlength="6"
-                autocomplete="one-time-code"
-                style="margin-bottom:12px;"
-            >
-
-            <button
-                type="button"
-                id="auth-otp-submit"
-                class="primary-btn"
-            >
-                認証して申請
-            </button>
-
-            <button
-                type="button"
-                id="auth-otp-cancel"
-                class="cancel-btn"
-            >
-                キャンセル
-            </button>
-        </div>
-    `;
-
-    // ========================================
-    // 要素取得
-    // ========================================
-    const usernameInput =
-        document.getElementById('auth-username');
-
-    const passwordInput =
-        document.getElementById('auth-password');
-
-    const confirmInput =
-        document.getElementById('auth-password-confirm');
-
-    const confirmWrapper =
-        document.getElementById('auth-password-confirm-wrapper');
-
-    const authSubmit =
-        document.getElementById('auth-submit-btn');
-
-    const authToggle =
-        document.getElementById('auth-toggle-btn');
-
-    const otpContainer =
-        document.getElementById('otp-container');
-
-    const otpSubmit =
-        document.getElementById('auth-otp-submit');
-
-    const otpCancel =
-        document.getElementById('auth-otp-cancel');
-
-    // ========================================
-    // 初期状態
-    // ========================================
-    let isSignUp = false;
-
+    // 初期化
     usernameInput.value = '';
     passwordInput.value = '';
-    confirmInput.value = '';
-
-    confirmWrapper.classList.add('hidden');
-
+    inputsWrapper.classList.remove('hidden');
     otpContainer.classList.add('hidden');
-
-    authTitle.textContent = 'ログイン';
-    authSubmit.textContent = 'ログイン';
-    authToggle.textContent = 'アカウント作成へ切替';
-
-    passwordInput.setAttribute(
-        'autocomplete',
-        'current-password'
-    );
-
     authOverlay.classList.remove('hidden');
+    let isSignUp = false;
 
-    // ========================================
-    // パスワード表示 / 非表示
-    // ========================================
-    authForm
-        .querySelectorAll('.toggle-password-btn')
-        .forEach(button => {
-
-            button.onclick = () => {
-
-                const targetId =
-                    button.dataset.target;
-
-                const target =
-                    document.getElementById(targetId);
-
-                if (!target) return;
-
-                if (target.type === 'password') {
-                    target.type = 'text';
-
-                    const use =
-                        button.querySelector('use');
-
-                    if (use) {
-                        use.setAttribute(
-                            'href',
-                            '#icon-eye-off'
-                        );
-                    }
-
-                } else {
-                    target.type = 'password';
-
-                    const use =
-                        button.querySelector('use');
-
-                    if (use) {
-                        use.setAttribute(
-                            'href',
-                            '#icon-eye'
-                        );
-                    }
-                }
-            };
-        });
-
-    // ========================================
-    // ログイン ⇔ アカウント作成
-    // ========================================
     authToggle.onclick = () => {
-
         isSignUp = !isSignUp;
-
+        document.getElementById('auth-title').textContent = isSignUp ? 'アカウント作成' : 'ログイン';
+        authSubmit.textContent = isSignUp ? 'アカウントを作成' : 'ログイン';
+        authToggle.textContent = isSignUp ? 'ログインへ切替' : 'アカウント作成へ切替';
         usernameInput.value = '';
         passwordInput.value = '';
-        confirmInput.value = '';
-
+        confirmInput.value = ''; // クリア処理
+        passwordInput.setAttribute('autocomplete', isSignUp ? 'new-password' : 'current-password');
+        
+        // 確認用フィールドの表示/非表示を切り替え
         if (isSignUp) {
-
-            // アカウント作成
-            authTitle.textContent = 'アカウント作成';
-
-            authSubmit.textContent =
-                'アカウントを作成';
-
-            authToggle.textContent =
-                'ログインへ切替';
-
             confirmWrapper.classList.remove('hidden');
-
-            passwordInput.setAttribute(
-                'autocomplete',
-                'new-password'
-            );
-
         } else {
-
-            // ログイン
-            authTitle.textContent = 'ログイン';
-
-            authSubmit.textContent =
-                'ログイン';
-
-            authToggle.textContent =
-                'アカウント作成へ切替';
-
             confirmWrapper.classList.add('hidden');
-
-            passwordInput.setAttribute(
-                'autocomplete',
-                'current-password'
-            );
         }
     };
 
-    // ========================================
-    // ログイン / アカウント作成
-    // ========================================
+    // ログインまたはコード送信ボタン
+    // アカウント作成またはログインボタン
     authSubmit.onclick = async () => {
+        const email = usernameInput.value.trim();
+        const pass = passwordInput.value.trim();
+        const confirmPass = confirmInput.value.trim();
 
-        const email =
-            usernameInput.value.trim();
-
-        const pass =
-            passwordInput.value.trim();
-
-        const confirmPass =
-            confirmInput.value.trim();
-
-        // ----------------------------
-        // 入力チェック
-        // ----------------------------
-        if (!email || !pass) {
-            alert(
-                'メールアドレスとパスワードを入力してください'
-            );
-            return;
+        if (!email || !pass) return alert('メールアドレスとパスワードを入力してください');
+        if (!email.includes('@') || !email.includes('.')) {
+            return alert('有効なメールアドレスを入力してください');
         }
 
-        if (!email.includes('@') ||
-            !email.includes('.')) {
-
-            alert(
-                '有効なメールアドレスを入力してください'
-            );
-            return;
-        }
-
-        // ----------------------------
-        // アカウント作成時
-        // ----------------------------
+        // ▼ 追加: アカウント作成時の一致チェックと最低文字数チェック
         if (isSignUp) {
-
-            if (!confirmPass) {
-                alert(
-                    '確認用パスワードを入力してください'
-                );
-                return;
-            }
-
             if (pass !== confirmPass) {
-                alert(
-                    'パスワードと確認用パスワードが一致しません'
-                );
-                return;
+                return alert('パスワードと確認用パスワードが一致しません');
             }
-
             if (pass.length < 8) {
-                alert(
-                    'パスワードは8文字以上で設定してください'
-                );
-                return;
+                return alert('パスワードは8文字以上で設定してください');
             }
         }
 
-        // ========================================
-        // Appwrite処理
-        // ========================================
         try {
-
-            if (isSignUp) {
-
-                // アカウント作成
-                const newUser =
-                    await account.create(
-                        ID.unique(),
-                        email,
-                        pass
-                    );
-
-                // 作成直後にログイン
-                await account.createEmailSession(
-                    email,
-                    pass
-                );
-
-                // usersコレクションへ登録
+if (isSignUp) {
+                // 1. Appwriteにアカウントを作成
+                const newUser = await account.create(ID.unique(), email, pass);
+                
+                // ★追加：DBに書き込む権限を得るため、作成直後に一時的にログインする
+                await account.createEmailSession(email, pass);
+                
+                // 2. データベースに「承認待ち」として登録
+                // ※自分自身 (newUser.$id) のみに更新・削除権限を絞ることでセキュリティを向上させます
                 await databases.createDocument(
-                    DB_ID,
-                    'users',
-                    newUser.$id,
-                    {
-                        email: email,
-                        status: 'pending'
+                    DB_ID, 
+                    'users', 
+                    newUser.$id, 
+                    { 
+                        email: email, 
+                        status: 'pending' 
                     },
                     [
-                        Permission.read(Role.any()),
-                        Permission.update(
-                            Role.user(newUser.$id)
-                        ),
-                        Permission.delete(
-                            Role.user(newUser.$id)
-                        )
+                        Permission.read(Role.any()),                 // 誰でも読み取り可能（管理者用）
+                        Permission.update(Role.user(newUser.$id)),   // 自分自身のみ更新可能
+                        Permission.delete(Role.user(newUser.$id))    // 自分自身のみ削除可能
                     ]
                 );
-
-                // 管理者へ通知
+                
+                // 3. 管理者へメール通知（擬似）
                 await sendAdminRequestEmail(email);
 
-                // セッション削除
+                // 4. セッションを破棄（ログアウト）して承認待ち状態にする
                 await account.deleteSession('current');
-
-                alert(
-                    'アカウントを作成しました。' +
-                    '管理者の承認をお待ちください。'
-                );
-
+                
+                alert('アカウントを作成しました。管理者の承認をお待ちください。');
                 location.reload();
-
-            } else {
-
-                // すでにセッションがあれば削除
+            } else {                // 通常ログイン
                 try {
+                    // すでにセッションがあればあらかじめ削除しておく
                     await account.deleteSession('current');
                 } catch (e) {
-                    // セッションがない場合は無視
+                    // セッションがない場合はエラーになるので無視する
                 }
 
-                // ログイン
-                await account.createEmailSession(
-                    email,
-                    pass
-                );
-
+                // 新しくログインセッションを作成
+                await account.createEmailSession(email, pass);
+                usernameInput.value = '';
+                passwordInput.value = '';
                 authOverlay.classList.add('hidden');
-
                 location.reload();
             }
-
         } catch (e) {
-
-            console.error('認証エラー:', e);
-
-            alert(
-                `エラー: ${e.message}`
-            );
+            alert(`エラー: ${e.message}`);
         }
     };
-
-    // ========================================
-    // OTP送信
-    // ========================================
-    otpSubmit.onclick = async () => {
-
-        const secret =
-            document.getElementById('auth-otp')
-                .value
-                .trim();
-
-        if (!secret) {
-            alert('認証コードを入力してください');
-            return;
-        }
-
-        if (!tempAuthData) {
-            alert('認証情報がありません');
-            return;
-        }
-
-        try {
-
-            await account.createSession(
-                tempAuthData.userId,
-                secret
-            );
-
-            await databases.createDocument(
-                DB_ID,
-                'users',
-                tempAuthData.userId,
-                {
-                    email: tempAuthData.email,
-                    status: 'pending'
-                }
-            );
-
-            await sendAdminRequestEmail(
-                tempAuthData.email
-            );
-
-            await account.deleteSession('current');
-
-            alert(
-                '管理者にアカウント開設のリクエストを送りました。' +
-                '承認されるまでお待ちください。'
-            );
-
-            location.reload();
-
-        } catch (e) {
-
-            console.error(
-                'OTP認証エラー:',
-                e
-            );
-
-            alert(
-                `認証エラー: ${e.message}`
-            );
-        }
-    };
-
-    // ========================================
-    // OTPキャンセル
-    // ========================================
-    otpCancel.onclick = () => {
-
-        otpContainer.classList.add('hidden');
-
-        usernameInput.classList.remove('hidden');
-        passwordInput.classList.remove('hidden');
-        confirmWrapper.classList.toggle(
-            'hidden',
-            !isSignUp
-        );
-
-        authSubmit.classList.remove('hidden');
-        authToggle.classList.remove('hidden');
-
-        authTitle.textContent =
-            isSignUp
-                ? 'アカウント作成'
-                : 'ログイン';
-
-        tempAuthData = null;
-    };
-}
 
     // 6桁コードの検証・申請完了処理
     document.getElementById('auth-otp-submit').onclick = async () => {
@@ -783,7 +427,6 @@ function showAuthModal() {
         tempAuthData = null;
     };
 }
-
 document.getElementById('btn-change-pass')?.addEventListener('click', async () => {
     const oldPass = document.getElementById('change-pass-old').value;
     const newPass = document.getElementById('change-pass-new').value;
@@ -1300,49 +943,15 @@ document.getElementById('lock-btn')?.addEventListener('click', () => {
             saveEditorState(true); openPage(state.currentPageId);
         }
     } else {
-        // ▼▼ prompt() をやめ、カスタムモーダルを表示する ▼▼
-        const setupOverlay = document.getElementById('lock-setup-overlay');
-        const pass1 = document.getElementById('setup-pass-1');
-        const pass2 = document.getElementById('setup-pass-2');
-        
-        pass1.value = '';
-        pass2.value = '';
-        // 目のアイコンの状態もリセット(非表示状態へ)
-        [pass1, pass2].forEach(el => {
-            el.type = 'password';
-            const btn = document.querySelector(`.toggle-password-btn[data-target="${el.id}"] use`);
-            if(btn) btn.setAttribute('href', '#icon-eye');
-        });
-
-        setupOverlay.classList.remove('hidden');
-        pass1.focus();
-
-        // 決定ボタンの処理（1回だけ登録されるように一旦クリア）
-        const submitBtn = document.getElementById('setup-pass-submit');
-        submitBtn.onclick = () => {
-            if (!pass1.value) return alert('パスワードを入力してください');
-            if (pass1.value !== pass2.value) return alert('パスワードと確認用パスワードが一致しません');
-            
-            // ロック処理実行
-            page.isLocked = true; 
-            page.password = pass1.value; 
-            page.isUnlockedSession = false;
-            
+        const pass = prompt("このページをロックするためのパスワードを入力してください:");
+        if (pass) {
+            page.isLocked = true; page.password = pass; page.isUnlockedSession = false;
             saveEditorState(true); 
-            const currentId = state.currentPageId; 
-            state.currentPageId = null;
-            document.getElementById('editor-wrapper').classList.add('hidden'); 
-            document.getElementById('empty-state').classList.remove('hidden');
+            const currentId = state.currentPageId; state.currentPageId = null;
+            document.getElementById('editor-wrapper').classList.add('hidden'); document.getElementById('empty-state').classList.remove('hidden');
             state.expandedNodes = state.expandedNodes.filter(id => !isPageLocked(id));
-            
-            setupOverlay.classList.add('hidden'); // モーダルを閉じる
             saveData().then(() => { renderTree(); openPage(currentId); });
-        };
-
-        // キャンセルボタンの処理
-        document.getElementById('setup-pass-cancel').onclick = () => {
-            setupOverlay.classList.add('hidden');
-        };
+        }
     }
 });
 

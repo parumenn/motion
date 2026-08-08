@@ -165,7 +165,30 @@
             <button type="button" id="modal-cancel" class="cancel-btn">キャンセル</button>
         </div>
     </div>
-</div>    
+</div>
+<div id="lock-setup-overlay" class="hidden">
+    <div class="modal">
+        <h3>ページをロック</h3>
+        <p class="modal-desc">このページをロックするためのパスワードを設定してください</p>
+        
+        <div class="password-input-wrapper">
+            <input type="password" id="setup-pass-1" placeholder="パスワード" autocomplete="new-password">
+            <button type="button" class="toggle-password-btn" data-target="setup-pass-1" title="パスワードを表示">
+                <svg class="icon"><use href="#icon-eye"></use></svg>
+            </button>
+        </div>
+        
+        <div class="password-input-wrapper">
+            <input type="password" id="setup-pass-2" placeholder="パスワード（確認用）" autocomplete="new-password">
+            <button type="button" class="toggle-password-btn" data-target="setup-pass-2" title="パスワードを表示">
+                <svg class="icon"><use href="#icon-eye"></use></svg>
+            </button>
+        </div>
+        
+        <button type="button" id="setup-pass-submit" class="primary-btn">ロックする</button>
+        <button type="button" id="setup-pass-cancel" class="cancel-btn">キャンセル</button>
+    </div>
+</div>
     <div id="search-overlay" class="hidden"><div class="modal search-modal"><input type="text" id="search-input" placeholder="タイトルや内容を検索 (Escで閉じる)"><div id="search-results" class="search-results"></div></div></div>
     
     <div id="link-overlay" class="hidden"><div class="modal"><h3>ページへリンク</h3><select id="link-select"></select><button id="link-submit" class="primary-btn">挿入</button><button id="link-cancel" class="cancel-btn">キャンセル</button></div></div>

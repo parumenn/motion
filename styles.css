@@ -1255,3 +1255,87 @@ body.dark-mode #context-menu {
         padding: 32px 24px;
     }
 }
+
+```css
+/* ================= 認証フォーム ================= */
+
+.login-form-container {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-main);
+    padding: 40px;
+    box-sizing: border-box;
+}
+
+#auth-form {
+    width: 100%;
+    max-width: 360px;
+    display: flex;
+    flex-direction: column;
+}
+
+#auth-form > input,
+#auth-form .password-input-wrapper input {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 44px;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-main);
+    color: var(--text-main);
+    font-size: 14px;
+}
+
+#auth-form > input {
+    margin: 0 0 12px 0;
+}
+
+#auth-form .password-input-wrapper {
+    width: 100%;
+    margin: 0 0 12px 0;
+    position: relative;
+    display: flex;
+}
+
+#auth-password-confirm-wrapper.hidden {
+    display: none !important;
+}
+
+#auth-password-confirm-wrapper:not(.hidden) {
+    display: flex;
+}
+
+#auth-form #auth-submit-btn,
+#auth-form #auth-toggle-btn {
+    width: 100%;
+    min-height: 44px;
+    margin-top: 8px;
+}
+
+#otp-container {
+    width: 100%;
+}
+
+#otp-container input {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 44px;
+}
+
+#otp-container button {
+    width: 100%;
+    margin-top: 8px;
+}
+
+@media (max-width: 768px) {
+    .login-form-container {
+        padding: 32px 24px;
+    }
+
+    #auth-form {
+        max-width: 100%;
+    }
+}

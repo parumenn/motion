@@ -263,24 +263,7 @@ function showAuthModal() {
     const authOverlay = document.getElementById('login-overlay');
 
 // パスワード表示切り替えイベントの設定
-    document.querySelectorAll('.toggle-password-btn').forEach(btn => {
-        // 重複登録を防ぐため一旦消す
-        btn.onclick = (e) => {
-            const targetId = btn.getAttribute('data-target');
-            const inputEl = document.getElementById(targetId);
-            const iconUseEl = btn.querySelector('use');
-            
-            if (inputEl.type === 'password') {
-                inputEl.type = 'text';
-                iconUseEl.setAttribute('href', '#icon-eye-off');
-                btn.title = 'パスワードを隠す';
-            } else {
-                inputEl.type = 'password';
-                iconUseEl.setAttribute('href', '#icon-eye');
-                btn.title = 'パスワードを表示';
-            }
-        };
-    });
+    
 
     if (!authOverlay) return;
 
@@ -1920,5 +1903,41 @@ document.querySelector('.settings-tab[data-tab="admin"]')?.addEventListener('cli
         });
     } catch (err) {
         listContainer.innerHTML = '<p style="font-size:13px; color:var(--danger);">リストの取得に失敗しました。</p>';
+    }
+});
+
+// ================= パスワード表示トグルの共通設定 =================
+document.addEventListener('click', (e) => {
+    const btn = e.target.closest('.toggle-password-btn');
+    if (!btn) return;
+
+    const targetId = btn.getAttribute('data-target');
+    const inputEl = document.getElementById(targetId);
+    const iconUseEl = btn.querySelector('use');
+    if (!inputEl) return;
+
+    // パスワードロック画面（CSSハック使用時）の場合
+    if (inputEl.style.webkitTextSecurity !== undefined && inputEl.style.webkitTextSecurity !== '') {
+        if (inputEl.style.webkitTextSecurity === 'disc') {
+            inputEl.style.webkitTextSecurity = 'none'; // 文字を表示
+            iconUseEl.setAttribute('href', '#icon-eye-off');
+            btn.title = 'パスワードを隠す';
+        } else {
+            inputEl.style.webkitTextSecurity = 'disc'; // 黒丸に戻す
+            iconUseEl.setAttribute('href', '#icon-eye');
+            btn.title = 'パスワードを表示';
+        }
+    } 
+    // 通常のパスワード入力欄（ログイン画面など）の場合
+    else {
+        if (inputEl.type === 'password') {
+            inputEl.type = 'text';
+            iconUseEl.setAttribute('href', '#icon-eye-off');
+            btn.title = 'パスワードを隠す';
+        } else {
+            inputEl.type = 'password';
+            iconUseEl.setAttribute('href', '#icon-eye');
+            btn.title = 'パスワードを表示';
+        }
     }
 });

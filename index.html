@@ -136,7 +136,7 @@
         <h3 id="modal-title">ページはロックされています</h3>
         <p class="modal-desc">パスワードを入力して解除してください</p>
         <form id="lock-pass-form" onsubmit="return false;">
-            <input type="password" id="modal-pass" name="lock-password" placeholder="パスワード" autocomplete="current-password">
+            <input type="password" id="modal-pass" placeholder="パスワード" autocomplete="new-password">
             <button type="button" id="modal-submit" class="primary-btn">解除</button>
             <button type="button" id="modal-cancel" class="cancel-btn">キャンセル</button>
         </form>
@@ -178,6 +178,8 @@
 
                     <h3 style="margin-top:24px;">ホーム画面</h3>
                     <label><input type="checkbox" id="setting-show-locked"> ロックされたページを「最近使ったページ」に表示する</label>
+<h3 style="margin-top:24px;">検索設定</h3>
+<label><input type="checkbox" id="setting-search-locked"> ロックされたページを検索結果に含める</label>
                 </div>
                 
                 <!-- アカウント -->
@@ -191,6 +193,11 @@
                         <div id="storage-bar-fill" class="storage-bar-fill"></div>
                     </div>
                     <p id="storage-limit-text" class="modal-desc" style="text-align:right; font-size:12px; margin-top:4px;"></p>
+
+
+<div id="storage-warning-text" class="hidden" style="color: #d93025; font-size: 13px; margin-top: 8px; font-weight: 500;">
+    ※ストレージ使用量が90%を超えています。不要な画像を削除してください。
+</div>
 
                     <h4 style="margin-top:24px;">パスワード変更</h4>
                     <input type="password" id="change-pass-old" placeholder="現在のパスワード">

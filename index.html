@@ -36,26 +36,6 @@
             <div class="modal" style="box-shadow:none; border:none; background:transparent; width:100%; max-width:320px;">
                 <h3 id="auth-title">ログイン</h3>
                 <form id="auth-form" onsubmit="return false;" autocomplete="on">
-    <input type="email" id="auth-username" name="username" placeholder="メールアドレス" autocomplete="email">
-    
-    <div class="password-input-wrapper">
-        <input type="password" id="auth-password" name="password" placeholder="パスワード" autocomplete="current-password">
-        <button type="button" class="toggle-password-btn" data-target="auth-password" title="パスワードを表示">
-            <svg class="icon"><use href="#icon-eye"></use></svg>
-        </button>
-    </div>
-
-    <!-- アカウント作成時のみ表示する確認用フィールド -->
-    <div id="auth-password-confirm-wrapper" class="password-input-wrapper hidden">
-        <input type="password" id="auth-password-confirm" placeholder="パスワード（確認用）" autocomplete="new-password">
-        <button type="button" class="toggle-password-btn" data-target="auth-password-confirm" title="パスワードを表示">
-            <svg class="icon"><use href="#icon-eye"></use></svg>
-        </button>
-    </div>
-
-    <button type="button" id="auth-submit-btn" class="primary-btn">ログイン</button>
-    <button type="button" id="auth-toggle-btn" class="cancel-btn">アカウント作成へ切替</button>
-</form>
             </div>
         </div>
     </div>
@@ -91,7 +71,8 @@
             </div>
         </div>
 
-        <div class="editor-wrapper" id="editor-wrapper" class="hidden">
+        <div id="editor-wrapper" class="editor-wrapper hidden">
+
             <div id="breadcrumb" class="breadcrumb"></div>
             <div class="page-header">
                 <div id="page-title" class="page-title-input" contenteditable="true" data-placeholder="無題" spellcheck="false"></div>

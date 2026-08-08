@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+    <script type="text/javascript" nonce="bff5c105e9c3497db37830a0264" src="//local.adguard.org?ts=1786172723372&amp;type=content-script&amp;dmn=mail-attachment.googleusercontent.com&amp;url=https%3A%2F%2Fmail-attachment.googleusercontent.com%2Fattachment%2Fu%2F0%2F%3Fui%3D2%26ik%3Df3117add55%26attid%3D0.1%26permmsgid%3Dmsg-a%3Ar-3545140380221300374%26th%3D19fe03dc851f989c%26view%3Datt%26zw%26disp%3Dsafe%26saddbat%3DANGjdJ-nGi8a7lwdeY_EUQFotWRqxLBNje_-4DN0yrsPXDUfwhZhn9OELWS8XMVG-gFIbVKlOt6duYYfEMV20xsKFZRbMzwYtZZS8LidTuJ-0ouZAyxdjm-zfSy189mjtCLRnHF1UjZHJ2Pa2M7ZJ9p0isfTnROycMvM5hIbWiXdHT4DiI-p0EaMmdllICKcYExDywX0YLM_sY0qysXV61FxZevTS-ScQOG6-9kcWXSdEUhZCMhnsGzrXKet1_uQZMjeLBFmWWcQvlssCMkzBbvDQem55StoreyKF5ZLPqhklAgYtiV2aQVklMOXWI3RzCJU6YUIYp0iXSOV_dI6p9otwWQJuycIoWmi3j-c_35Xcv4539Lvaja08mzStlRKCw5R6ldqFVkf-yw235AdH4XK5NOmDjDVdAjz-8xKunWzrFYvI9kXR4tYeDuLUUi-Na0i69Qljhs9eoiuQHugcTMI5Mod59aUv0lyaT0IPSNbBOZXWb_aB-yYqe0_9vPs6yIZ7wkNCEwF-u2yLWUflA-ideINcjYK081-ZOwXXzyDV9MBN7zzOhiXhC49XW7JFt9lOCJv2sjup3FsgpfCPiLm491hAy4wjpuG5DrBjJJMJ8VuNYxBaiTPvzIqmgxGL7mEdAbxr6XppMy23cCinNzpw2a3BewT8TNAFLNPRVVCBZP97xGmqV_XmuqL7WCyFAUHOA0gEcAYWap_zudraeDdRL1XQZGRvmH22jFdV9CJgEeTBsSI5B7B94MeT0CR8w2tafkz_vJ18Zc5CstzZpfnMunQsbajmIjZWRU3cGB4fLXmNoW5fJwziZtc-5Oc8ePt5ONUwXSWEXnZCVgeBpaatu_C-Sn9HPS3RJKzqyCJqawFeNsK99HypVUoZ2b2-xitzj6O_8RILF1M0ZBNMx90VUSMspLZqw15rkEnpxsA0BsEGyU1IvkTHTj5AbLHvj12M5Z_5MdZZdzxKDbnhM-eyisYL37Lt5_73F5vuumrHFFArsEgr2FxlfGs6bGZMQ_jEyrT4PatGfIOdylbFaONzHEI6fxu6SoEgiUmEg&amp;app=chrome.exe&amp;css=3&amp;js=1&amp;rel=0&amp;rji=0&amp;sbe=1"></script><script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Motion</title>
@@ -36,6 +36,26 @@
             <div class="modal" style="box-shadow:none; border:none; background:transparent; width:100%; max-width:320px;">
                 <h3 id="auth-title">ログイン</h3>
                 <form id="auth-form" onsubmit="return false;" autocomplete="on">
+    <input type="email" id="auth-username" name="username" placeholder="メールアドレス" autocomplete="email">
+    
+    <div class="password-input-wrapper">
+        <input type="password" id="auth-password" name="password" placeholder="パスワード" autocomplete="current-password">
+        <button type="button" class="toggle-password-btn" data-target="auth-password" title="パスワードを表示">
+            <svg class="icon"><use href="#icon-eye"></use></svg>
+        </button>
+    </div>
+
+    <!-- アカウント作成時のみ表示する確認用フィールド -->
+    <div id="auth-password-confirm-wrapper" class="password-input-wrapper hidden">
+        <input type="password" id="auth-password-confirm" placeholder="パスワード（確認用）" autocomplete="new-password">
+        <button type="button" class="toggle-password-btn" data-target="auth-password-confirm" title="パスワードを表示">
+            <svg class="icon"><use href="#icon-eye"></use></svg>
+        </button>
+    </div>
+
+    <button type="button" id="auth-submit-btn" class="primary-btn">ログイン</button>
+    <button type="button" id="auth-toggle-btn" class="cancel-btn">アカウント作成へ切替</button>
+</form>
             </div>
         </div>
     </div>
@@ -71,8 +91,7 @@
             </div>
         </div>
 
-        <div id="editor-wrapper" class="editor-wrapper hidden">
-
+        <div class="editor-wrapper" id="editor-wrapper" class="hidden">
             <div id="breadcrumb" class="breadcrumb"></div>
             <div class="page-header">
                 <div id="page-title" class="page-title-input" contenteditable="true" data-placeholder="無題" spellcheck="false"></div>
@@ -146,30 +165,7 @@
             <button type="button" id="modal-cancel" class="cancel-btn">キャンセル</button>
         </div>
     </div>
-</div>
-<div id="lock-setup-overlay" class="hidden">
-    <div class="modal">
-        <h3>ページをロック</h3>
-        <p class="modal-desc">このページをロックするためのパスワードを設定してください</p>
-        
-        <div class="password-input-wrapper">
-            <input type="password" id="setup-pass-1" placeholder="パスワード" autocomplete="new-password">
-            <button type="button" class="toggle-password-btn" data-target="setup-pass-1" title="パスワードを表示">
-                <svg class="icon"><use href="#icon-eye"></use></svg>
-            </button>
-        </div>
-        
-        <div class="password-input-wrapper">
-            <input type="password" id="setup-pass-2" placeholder="パスワード（確認用）" autocomplete="new-password">
-            <button type="button" class="toggle-password-btn" data-target="setup-pass-2" title="パスワードを表示">
-                <svg class="icon"><use href="#icon-eye"></use></svg>
-            </button>
-        </div>
-        
-        <button type="button" id="setup-pass-submit" class="primary-btn">ロックする</button>
-        <button type="button" id="setup-pass-cancel" class="cancel-btn">キャンセル</button>
-    </div>
-</div>
+</div>    
     <div id="search-overlay" class="hidden"><div class="modal search-modal"><input type="text" id="search-input" placeholder="タイトルや内容を検索 (Escで閉じる)"><div id="search-results" class="search-results"></div></div></div>
     
     <div id="link-overlay" class="hidden"><div class="modal"><h3>ページへリンク</h3><select id="link-select"></select><button id="link-submit" class="primary-btn">挿入</button><button id="link-cancel" class="cancel-btn">キャンセル</button></div></div>

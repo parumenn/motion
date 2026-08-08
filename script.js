@@ -362,38 +362,39 @@ function showAuthModal() {
         }
 
         try {
-            if (isSignUp) {
+if (isSignUp) {
                 // 1. Appwriteにアカウントを作成
                 const newUser = await account.create(ID.unique(), email, pass);
                 
+                // ★追加：DBに書き込む権限を得るため、作成直後に一時的にログインする
+                await account.createEmailSession(email, pass);
+                
                 // 2. データベースに「承認待ち」として登録
-                // ※ 第5引数のパーミッション指定を削除し、コンソール側の設定（any/guestsのCreate許可）に任せます
-                // AppwriteのPermissions定数を利用して権限を指定
-await databases.createDocument(
-    DB_ID, 
-    'users', 
-    newUser.$id, 
-    { 
-        email: email, 
-        status: 'pending' 
-    },
-    [
-        Permission.read(Role.any()),       // 誰でも読み取り可能
-        Permission.update(Role.users()),   // ログイン済みユーザー（管理者を含む）が更新可能
-        Permission.delete(Role.users())    // 念のため削除権限も付与
-    ]
-);
+                // ※自分自身 (newUser.$id) のみに更新・削除権限を絞ることでセキュリティを向上させます
+                await databases.createDocument(
+                    DB_ID, 
+                    'users', 
+                    newUser.$id, 
+                    { 
+                        email: email, 
+                        status: 'pending' 
+                    },
+                    [
+                        Permission.read(Role.any()),                 // 誰でも読み取り可能（管理者用）
+                        Permission.update(Role.user(newUser.$id)),   // 自分自身のみ更新可能
+                        Permission.delete(Role.user(newUser.$id))    // 自分自身のみ削除可能
+                    ]
+                );
                 
                 // 3. 管理者へメール通知（擬似）
                 await sendAdminRequestEmail(email);
 
-                // 4. すぐにログアウトさせてログイン画面に戻す
+                // 4. セッションを破棄（ログアウト）して承認待ち状態にする
                 await account.deleteSession('current');
                 
                 alert('アカウントを作成しました。管理者の承認をお待ちください。');
                 location.reload();
-            } else {
-                // 通常ログイン
+            } else {                // 通常ログイン
                 try {
                     // すでにセッションがあればあらかじめ削除しておく
                     await account.deleteSession('current');

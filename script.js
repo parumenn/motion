@@ -261,6 +261,27 @@ let tempAuthData = null; // OTP検証用データ保持
 
 function showAuthModal() {
     const authOverlay = document.getElementById('login-overlay');
+
+// パスワード表示切り替えイベントの設定
+    document.querySelectorAll('.toggle-password-btn').forEach(btn => {
+        // 重複登録を防ぐため一旦消す
+        btn.onclick = (e) => {
+            const targetId = btn.getAttribute('data-target');
+            const inputEl = document.getElementById(targetId);
+            const iconUseEl = btn.querySelector('use');
+            
+            if (inputEl.type === 'password') {
+                inputEl.type = 'text';
+                iconUseEl.setAttribute('href', '#icon-eye-off');
+                btn.title = 'パスワードを隠す';
+            } else {
+                inputEl.type = 'password';
+                iconUseEl.setAttribute('href', '#icon-eye');
+                btn.title = 'パスワードを表示';
+            }
+        };
+    });
+
     if (!authOverlay) return;
 
     const usernameInput = document.getElementById('auth-username');
@@ -303,11 +324,19 @@ function showAuthModal() {
     authToggle.onclick = () => {
         isSignUp = !isSignUp;
         document.getElementById('auth-title').textContent = isSignUp ? 'アカウント作成' : 'ログイン';
-        authSubmit.textContent = isSignUp ? 'コードを送信' : 'ログイン';
+        authSubmit.textContent = isSignUp ? 'アカウントを作成' : 'ログイン';
         authToggle.textContent = isSignUp ? 'ログインへ切替' : 'アカウント作成へ切替';
         usernameInput.value = '';
         passwordInput.value = '';
+        confirmInput.value = ''; // クリア処理
         passwordInput.setAttribute('autocomplete', isSignUp ? 'new-password' : 'current-password');
+        
+        // 確認用フィールドの表示/非表示を切り替え
+        if (isSignUp) {
+            confirmWrapper.classList.remove('hidden');
+        } else {
+            confirmWrapper.classList.add('hidden');
+        }
     };
 
     // ログインまたはコード送信ボタン
@@ -315,10 +344,21 @@ function showAuthModal() {
     authSubmit.onclick = async () => {
         const email = usernameInput.value.trim();
         const pass = passwordInput.value.trim();
+        const confirmPass = confirmInput.value.trim();
 
         if (!email || !pass) return alert('メールアドレスとパスワードを入力してください');
         if (!email.includes('@') || !email.includes('.')) {
             return alert('有効なメールアドレスを入力してください');
+        }
+
+        // ▼ 追加: アカウント作成時の一致チェックと最低文字数チェック
+        if (isSignUp) {
+            if (pass !== confirmPass) {
+                return alert('パスワードと確認用パスワードが一致しません');
+            }
+            if (pass.length < 8) {
+                return alert('パスワードは8文字以上で設定してください');
+            }
         }
 
         try {

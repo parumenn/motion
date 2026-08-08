@@ -259,7 +259,530 @@ const usernameToEmail = (username) => `${username.toLowerCase()}@motion.local`;
 
 let tempAuthData = null; // OTP検証用データ保持
 
-document.getElementById('auth-title').textContent
+```javascript
+function showAuthModal() {
+    const authOverlay = document.getElementById('login-overlay');
+    const authForm = document.getElementById('auth-form');
+    const authTitle = document.getElementById('auth-title');
+
+    if (!authOverlay || !authForm || !authTitle) {
+        console.error('認証モーダルのHTMLが見つかりません');
+        return;
+    }
+
+    // ========================================
+    // 認証フォームを生成
+    // ========================================
+    authForm.innerHTML = `
+        <input
+            type="email"
+            id="auth-username"
+            placeholder="メールアドレス"
+            autocomplete="email"
+        >
+
+        <div class="password-input-wrapper">
+            <input
+                type="password"
+                id="auth-password"
+                placeholder="パスワード"
+                autocomplete="current-password"
+            >
+            <button
+                type="button"
+                class="toggle-password-btn"
+                data-target="auth-password"
+                title="パスワードを表示"
+            >
+                <svg class="icon">
+                    <use href="#icon-eye"></use>
+                </svg>
+            </button>
+        </div>
+
+        <!-- パスワード確認欄 -->
+        <div
+            id="auth-password-confirm-wrapper"
+            class="password-input-wrapper hidden"
+        >
+            <input
+                type="password"
+                id="auth-password-confirm"
+                placeholder="パスワード（確認用）"
+                autocomplete="new-password"
+            >
+            <button
+                type="button"
+                class="toggle-password-btn"
+                data-target="auth-password-confirm"
+                title="パスワードを表示"
+            >
+                <svg class="icon">
+                    <use href="#icon-eye"></use>
+                </svg>
+            </button>
+        </div>
+
+        <button
+            type="button"
+            id="auth-submit-btn"
+            class="primary-btn"
+        >
+            ログイン
+        </button>
+
+        <button
+            type="button"
+            id="auth-toggle-btn"
+            class="cancel-btn"
+        >
+            アカウント作成へ切替
+        </button>
+
+        <div id="otp-container" class="hidden">
+            <p style="font-size:14px; margin-bottom:12px; color:var(--text-main);">
+                メールに送信された6桁の認証コードを入力してください。
+            </p>
+
+            <input
+                type="text"
+                id="auth-otp"
+                placeholder="6桁のコード"
+                maxlength="6"
+                autocomplete="one-time-code"
+                style="margin-bottom:12px;"
+            >
+
+            <button
+                type="button"
+                id="auth-otp-submit"
+                class="primary-btn"
+            >
+                認証して申請
+            </button>
+
+            <button
+                type="button"
+                id="auth-otp-cancel"
+                class="cancel-btn"
+            >
+                キャンセル
+            </button>
+        </div>
+    `;
+
+    // ========================================
+    // 要素取得
+    // ========================================
+    const usernameInput =
+        document.getElementById('auth-username');
+
+    const passwordInput =
+        document.getElementById('auth-password');
+
+    const confirmInput =
+        document.getElementById('auth-password-confirm');
+
+    const confirmWrapper =
+        document.getElementById('auth-password-confirm-wrapper');
+
+    const authSubmit =
+        document.getElementById('auth-submit-btn');
+
+    const authToggle =
+        document.getElementById('auth-toggle-btn');
+
+    const otpContainer =
+        document.getElementById('otp-container');
+
+    const otpSubmit =
+        document.getElementById('auth-otp-submit');
+
+    const otpCancel =
+        document.getElementById('auth-otp-cancel');
+
+    // ========================================
+    // 初期状態
+    // ========================================
+    let isSignUp = false;
+
+    usernameInput.value = '';
+    passwordInput.value = '';
+    confirmInput.value = '';
+
+    confirmWrapper.classList.add('hidden');
+
+    otpContainer.classList.add('hidden');
+
+    authTitle.textContent = 'ログイン';
+    authSubmit.textContent = 'ログイン';
+    authToggle.textContent = 'アカウント作成へ切替';
+
+    passwordInput.setAttribute(
+        'autocomplete',
+        'current-password'
+    );
+
+    authOverlay.classList.remove('hidden');
+
+    // ========================================
+    // パスワード表示 / 非表示
+    // ========================================
+    authForm
+        .querySelectorAll('.toggle-password-btn')
+        .forEach(button => {
+
+            button.onclick = () => {
+
+                const targetId =
+                    button.dataset.target;
+
+                const target =
+                    document.getElementById(targetId);
+
+                if (!target) return;
+
+                if (target.type === 'password') {
+                    target.type = 'text';
+
+                    const use =
+                        button.querySelector('use');
+
+                    if (use) {
+                        use.setAttribute(
+                            'href',
+                            '#icon-eye-off'
+                        );
+                    }
+
+                } else {
+                    target.type = 'password';
+
+                    const use =
+                        button.querySelector('use');
+
+                    if (use) {
+                        use.setAttribute(
+                            'href',
+                            '#icon-eye'
+                        );
+                    }
+                }
+            };
+        });
+
+    // ========================================
+    // ログイン ⇔ アカウント作成
+    // ========================================
+    authToggle.onclick = () => {
+
+        isSignUp = !isSignUp;
+
+        usernameInput.value = '';
+        passwordInput.value = '';
+        confirmInput.value = '';
+
+        if (isSignUp) {
+
+            // アカウント作成
+            authTitle.textContent = 'アカウント作成';
+
+            authSubmit.textContent =
+                'アカウントを作成';
+
+            authToggle.textContent =
+                'ログインへ切替';
+
+            confirmWrapper.classList.remove('hidden');
+
+            passwordInput.setAttribute(
+                'autocomplete',
+                'new-password'
+            );
+
+        } else {
+
+            // ログイン
+            authTitle.textContent = 'ログイン';
+
+            authSubmit.textContent =
+                'ログイン';
+
+            authToggle.textContent =
+                'アカウント作成へ切替';
+
+            confirmWrapper.classList.add('hidden');
+
+            passwordInput.setAttribute(
+                'autocomplete',
+                'current-password'
+            );
+        }
+    };
+
+    // ========================================
+    // ログイン / アカウント作成
+    // ========================================
+    authSubmit.onclick = async () => {
+
+        const email =
+            usernameInput.value.trim();
+
+        const pass =
+            passwordInput.value.trim();
+
+        const confirmPass =
+            confirmInput.value.trim();
+
+        // ----------------------------
+        // 入力チェック
+        // ----------------------------
+        if (!email || !pass) {
+            alert(
+                'メールアドレスとパスワードを入力してください'
+            );
+            return;
+        }
+
+        if (!email.includes('@') ||
+            !email.includes('.')) {
+
+            alert(
+                '有効なメールアドレスを入力してください'
+            );
+            return;
+        }
+
+        // ----------------------------
+        // アカウント作成時
+        // ----------------------------
+        if (isSignUp) {
+
+            if (!confirmPass) {
+                alert(
+                    '確認用パスワードを入力してください'
+                );
+                return;
+            }
+
+            if (pass !== confirmPass) {
+                alert(
+                    'パスワードと確認用パスワードが一致しません'
+                );
+                return;
+            }
+
+            if (pass.length < 8) {
+                alert(
+                    'パスワードは8文字以上で設定してください'
+                );
+                return;
+            }
+        }
+
+        // ========================================
+        // Appwrite処理
+        // ========================================
+        try {
+
+            if (isSignUp) {
+
+                // アカウント作成
+                const newUser =
+                    await account.create(
+                        ID.unique(),
+                        email,
+                        pass
+                    );
+
+                // 作成直後にログイン
+                await account.createEmailSession(
+                    email,
+                    pass
+                );
+
+                // usersコレクションへ登録
+                await databases.createDocument(
+                    DB_ID,
+                    'users',
+                    newUser.$id,
+                    {
+                        email: email,
+                        status: 'pending'
+                    },
+                    [
+                        Permission.read(Role.any()),
+                        Permission.update(
+                            Role.user(newUser.$id)
+                        ),
+                        Permission.delete(
+                            Role.user(newUser.$id)
+                        )
+                    ]
+                );
+
+                // 管理者へ通知
+                await sendAdminRequestEmail(email);
+
+                // セッション削除
+                await account.deleteSession('current');
+
+                alert(
+                    'アカウントを作成しました。' +
+                    '管理者の承認をお待ちください。'
+                );
+
+                location.reload();
+
+            } else {
+
+                // すでにセッションがあれば削除
+                try {
+                    await account.deleteSession('current');
+                } catch (e) {
+                    // セッションがない場合は無視
+                }
+
+                // ログイン
+                await account.createEmailSession(
+                    email,
+                    pass
+                );
+
+                authOverlay.classList.add('hidden');
+
+                location.reload();
+            }
+
+        } catch (e) {
+
+            console.error('認証エラー:', e);
+
+            alert(
+                `エラー: ${e.message}`
+            );
+        }
+    };
+
+    // ========================================
+    // OTP送信
+    // ========================================
+    otpSubmit.onclick = async () => {
+
+        const secret =
+            document.getElementById('auth-otp')
+                .value
+                .trim();
+
+        if (!secret) {
+            alert('認証コードを入力してください');
+            return;
+        }
+
+        if (!tempAuthData) {
+            alert('認証情報がありません');
+            return;
+        }
+
+        try {
+
+            await account.createSession(
+                tempAuthData.userId,
+                secret
+            );
+
+            await databases.createDocument(
+                DB_ID,
+                'users',
+                tempAuthData.userId,
+                {
+                    email: tempAuthData.email,
+                    status: 'pending'
+                }
+            );
+
+            await sendAdminRequestEmail(
+                tempAuthData.email
+            );
+
+            await account.deleteSession('current');
+
+            alert(
+                '管理者にアカウント開設のリクエストを送りました。' +
+                '承認されるまでお待ちください。'
+            );
+
+            location.reload();
+
+        } catch (e) {
+
+            console.error(
+                'OTP認証エラー:',
+                e
+            );
+
+            alert(
+                `認証エラー: ${e.message}`
+            );
+        }
+    };
+
+    // ========================================
+    // OTPキャンセル
+    // ========================================
+    otpCancel.onclick = () => {
+
+        otpContainer.classList.add('hidden');
+
+        usernameInput.classList.remove('hidden');
+        passwordInput.classList.remove('hidden');
+        confirmWrapper.classList.toggle(
+            'hidden',
+            !isSignUp
+        );
+
+        authSubmit.classList.remove('hidden');
+        authToggle.classList.remove('hidden');
+
+        authTitle.textContent =
+            isSignUp
+                ? 'アカウント作成'
+                : 'ログイン';
+
+        tempAuthData = null;
+    };
+}
+
+    // 6桁コードの検証・申請完了処理
+    document.getElementById('auth-otp-submit').onclick = async () => {
+        const secret = document.getElementById('auth-otp').value.trim();
+        if(!secret) return alert('認証コードを入力してください');
+        
+        try {
+            await account.createSession(tempAuthData.userId, secret);
+            
+            await databases.createDocument(DB_ID, 'users', tempAuthData.userId, { 
+                email: tempAuthData.email, 
+                status: 'pending' 
+            });
+            
+            await sendAdminRequestEmail(tempAuthData.email);
+            await account.deleteSession('current');
+            
+            alert('管理者にアカウント開設のリクエストを送りました。承認されるまでお待ちください。');
+            location.reload();
+        } catch (e) {
+            alert(`認証エラー: ${e.message}`);
+        }
+    };
+
+    document.getElementById('auth-otp-cancel').onclick = () => {
+        inputsWrapper.classList.remove('hidden');
+        otpContainer.classList.add('hidden');
+        document.getElementById('auth-title').textContent = 'アカウント作成';
+        tempAuthData = null;
+    };
+}
 
 document.getElementById('btn-change-pass')?.addEventListener('click', async () => {
     const oldPass = document.getElementById('change-pass-old').value;

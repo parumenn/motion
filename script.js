@@ -108,6 +108,21 @@ async function initApp() {
             checkPendingUsersForAdmin();
         }
 
+// initApp() 内の currentUser の名前表示などをセットした直後に以下を追加
+try {
+    const prefs = await account.getPrefs();
+    if (prefs.theme) localStorage.setItem('local_workspace_theme', prefs.theme);
+    if (prefs.image_quality) localStorage.setItem('motion_image_quality', prefs.image_quality);
+    if (prefs.show_locked !== undefined) localStorage.setItem('motion_show_locked_in_home', prefs.show_locked);
+    if (prefs.search_locked !== undefined) localStorage.setItem('motion_search_locked', prefs.search_locked);
+} catch(e) { console.warn('設定の読み込みスキップ:', e); }
+
+applyTheme();
+const savedQuality = localStorage.getItem('motion_image_quality') || 'original';
+document.getElementById('setting-image-quality').value = savedQuality;
+document.getElementById('setting-show-locked').checked = (localStorage.getItem('motion_show_locked_in_home') === 'true');
+document.getElementById('setting-search-locked').checked = (localStorage.getItem('motion_search_locked') === 'true');
+
         const savedUi = localStorage.getItem('motion_ui_state');
         if (savedUi) {
             const parsedUi = JSON.parse(savedUi);
@@ -218,15 +233,26 @@ async function calcStorageUsage() {
     usageText.innerHTML = `テキストデータ: ${formatBytes(textBytes)}<br>添付ファイル: ${formatBytes(currentMediaBytes)}`;
     
     // プログレスバーの更新処理
-    if (limitText && barFill) {
-        const percent = Math.min((currentMediaBytes / MAX_MEDIA_BYTES) * 100, 100);
-        barFill.style.width = `${percent}%`;
-        barFill.classList.remove('warning', 'danger');
-        if (percent >= 90) barFill.classList.add('danger');
-        else if (percent >= 70) barFill.classList.add('warning');
-        
-        limitText.textContent = `${formatBytes(currentMediaBytes)} / 500.00 MB (${percent.toFixed(1)}%)`;
+if (limitText && barFill) {
+    const percent = Math.min((currentMediaBytes / MAX_MEDIA_BYTES) * 100, 100);
+    barFill.style.width = `${percent}%`;
+    barFill.classList.remove('warning', 'danger');
+    
+    const warningText = document.getElementById('storage-warning-text');
+    
+    if (percent >= 90) {
+        barFill.classList.add('danger');
+        if(warningText) warningText.classList.remove('hidden'); // 90%超過で警告表示
     }
+    else if (percent >= 70) {
+        barFill.classList.add('warning');
+        if(warningText) warningText.classList.add('hidden');
+    } else {
+        if(warningText) warningText.classList.add('hidden');
+    }
+    
+    limitText.textContent = `${formatBytes(currentMediaBytes)} / 500.00 MB (${percent.toFixed(1)}%)`;
+}
 }
 
 const usernameToEmail = (username) => `${username.toLowerCase()}@motion.local`;
@@ -530,6 +556,13 @@ function isPageLocked(pageId) {
     }
     return null;
 }
+
+document.getElementById('setting-search-locked')?.addEventListener('change', (e) => {
+    const val = e.target.checked;
+    localStorage.setItem('motion_search_locked', val);
+    savePrefs('search_locked', val);
+});
+
 
 function applyTheme() {
     const theme = localStorage.getItem('local_workspace_theme') || 'light';
@@ -1588,8 +1621,15 @@ function openSearchModal() {
     searchInput.oninput = (e) => {
         const q = e.target.value.toLowerCase(); resultsEl.innerHTML = '';
         if(!q) return;
+        
+        const includeLocked = localStorage.getItem('motion_search_locked') === 'true';
+        
         Object.values(state.pages).forEach(p => {
-            let match = false; let snippet = '';
+            // ロックされたページを除外する判定
+            if (!includeLocked && isPageLocked(p.id)) return;
+            
+            let match = false; let snippet = ''; // ←宣言はここ1回だけでOKです
+            
             if ((p.title||'無題').toLowerCase().includes(q)) match = true;
             else {
                 const searchBlocks = (blocks) => {
@@ -1612,7 +1652,6 @@ function openSearchModal() {
         });
     };
 }
-
 document.getElementById('settings-btn').addEventListener('click', () => document.getElementById('settings-overlay').classList.remove('hidden'));
 document.getElementById('settings-close').addEventListener('click', () => document.getElementById('settings-overlay').classList.add('hidden'));
 

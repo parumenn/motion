@@ -17,6 +17,113 @@ let pendingImageTargetBlock = null;
 
 let currentMediaBytes = 0;
 const MAX_MEDIA_BYTES = 500 * 1024 * 1024; // 500MB 上限
+// ================= 複数ブロック選択・コピペ用の状態と補助関数 =================
+let selectedBlocks = new Set();
+let isBlockSelecting = false;
+let blockSelectionStartIdx = -1;
+let lastCtrlATime = 0;
+
+function getFlatBlockElements() {
+    return Array.from(document.querySelectorAll('#editor .block-wrapper'));
+}
+
+function clearBlockSelection(clearVars = true) {
+    document.querySelectorAll('.selected-block').forEach(el => el.classList.remove('selected-block'));
+    selectedBlocks.clear();
+    if (clearVars) {
+        blockSelectionStartIdx = -1;
+        isBlockSelecting = false;
+    }
+}
+
+function extractSingleBlock(wrapper) {
+    const type = wrapper.dataset.type;
+    const contentEl = wrapper.querySelector(':scope > .block-main > .block-content');
+    const fileId = contentEl?.dataset.fileId || null;
+
+    let content = '';
+    if (type === 'page_link') content = contentEl?.dataset.linkId || '';
+    else if (type === 'image') content = contentEl?.querySelector('img')?.src || '';
+    else if (contentEl) {
+        content = DOMPurify.sanitize(contentEl.innerHTML, { ALLOWED_TAGS: ['a','br','b','strong','i','em','u','s','strike','span'], ALLOWED_ATTR: ['href','target','rel','style','class'] });
+    }
+    
+    const childrenContainer = wrapper.querySelector(':scope > .block-children');
+    const children = childrenContainer ? extractBlocks(childrenContainer) : [];
+
+    return { 
+        id: wrapper.dataset.id, type, content, fileId, 
+        checked: wrapper.classList.contains('checked'), 
+        toggleOpen: wrapper.classList.contains('open'), 
+        children 
+    };
+}
+
+function regenerateBlockIds(blocks) {
+    return blocks.map(b => ({
+        ...b,
+        id: generateId(),
+        children: b.children && b.children.length > 0 ? regenerateBlockIds(b.children) : []
+    }));
+}
+
+function convertBlocksToMarkdown(blocks, indent = '') {
+    let md = '';
+    blocks.forEach(b => {
+        let prefix = '';
+        if (b.type === 'h1') prefix = '# ';
+        else if (b.type === 'h2') prefix = '## ';
+        else if (b.type === 'h3') prefix = '### ';
+        else if (b.type === 'todo') prefix = b.checked ? '- [x] ' : '- [ ] ';
+        else if (b.type === 'toggle') prefix = '> ';
+
+        let text = b.content.replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '');
+        if (b.type === 'image') text = `![画像](${b.content})`;
+        if (b.type === 'page_link') text = `[ページリンク]`;
+
+        md += `${indent}${prefix}${text}\n`;
+        if (b.children && b.children.length > 0) md += convertBlocksToMarkdown(b.children, indent + '  ');
+    });
+    return md;
+}
+
+function deleteSelectedBlocks() {
+    if (selectedBlocks.size === 0) return;
+    const blocks = getFlatBlockElements();
+    let firstDeletedIdx = -1;
+
+    blocks.forEach((b, idx) => {
+        if (selectedBlocks.has(b.dataset.id)) {
+            if (firstDeletedIdx === -1) firstDeletedIdx = idx;
+            if (b.dataset.type === 'image') {
+                const imgEl = b.querySelector('img');
+                const fileId = b.querySelector('.block-content')?.dataset.fileId;
+                deleteImageFromStorage(imgEl?.src, fileId);
+            }
+            b.remove();
+        }
+    });
+
+    clearBlockSelection();
+    saveEditorState(true);
+
+    const newBlocks = getFlatBlockElements();
+    if (newBlocks.length === 0) {
+        const temp = document.createElement('div');
+        renderBlocks([{ id: generateId(), type: 'p', content: '', children: [] }], temp);
+        editorEl.appendChild(temp.firstElementChild);
+        editorEl.querySelector('.block-content')?.focus();
+    } else {
+        const targetIdx = Math.max(0, firstDeletedIdx - 1);
+        const focusEl = newBlocks[targetIdx]?.querySelector('.block-content');
+        if (focusEl) {
+            focusEl.focus();
+            if (focusEl.contentEditable === "true") setCaretPosition(focusEl, focusEl.textContent.length);
+        }
+    }
+    reinitSortables();
+}
+// =======================================================================
 
 // Appwrite Storageから画像を削除する処理
 async function deleteImageFromStorage(fileUrl, fileId) {
@@ -594,7 +701,16 @@ function executeRedo(pageId) {
 }
 
 document.addEventListener('keydown', (e) => {
+    // 選択中に何らかのキー(文字など)が押されたら選択解除する
+    if (selectedBlocks.size > 0 && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        clearBlockSelection();
+    }
+
     if (e.key === 'Escape') {
+        if (selectedBlocks.size > 0) {
+            clearBlockSelection();
+            return;
+        }
         document.getElementById('search-overlay')?.classList.add('hidden');
         document.getElementById('floating-menu')?.classList.add('hidden');
         document.getElementById('overlay')?.classList.add('hidden');
@@ -604,6 +720,38 @@ document.addEventListener('keydown', (e) => {
         closeSlashMenu();
         document.getElementById('context-menu')?.classList.add('hidden');
         return;
+    }
+
+    // ★追加: 複数選択時の一括削除 (Backspace / Delete)
+    if ((e.key === 'Backspace' || e.key === 'Delete') && selectedBlocks.size > 0) {
+        e.preventDefault();
+        deleteSelectedBlocks();
+        return;
+    }
+
+    // ★追加: Ctrl+A (全選択) のスマート対応
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
+        const inEditor = e.target.closest('#editor');
+        if (inEditor || selectedBlocks.size > 0) {
+            const now = Date.now();
+            const activeBlock = document.activeElement.closest('.block-wrapper');
+            
+            // 500ms以内に連続入力されたか、カーソルがない状態なら全体を選択
+            if (now - lastCtrlATime < 500 || (!activeBlock && selectedBlocks.size === 0)) {
+                e.preventDefault();
+                window.getSelection().removeAllRanges();
+                const blocks = getFlatBlockElements();
+                clearBlockSelection(false);
+                blocks.forEach(b => {
+                    b.classList.add('selected-block');
+                    selectedBlocks.add(b.dataset.id);
+                });
+            } else {
+                // 1回目のCtrl+A: ブロック内のテキスト全選択（ネイティブ）
+                if (selectedBlocks.size > 0) clearBlockSelection();
+            }
+            lastCtrlATime = now;
+        }
     }
 
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
@@ -1341,16 +1489,50 @@ function handleBlockKeydown(e) {
 
 function handleBlockPaste(e) {
     const clipboardData = e.clipboardData || window.clipboardData;
-    const items = clipboardData.items;
     
+    // ★追加: 構造化データのペーストを優先
+    const motionData = clipboardData.getData('application/x-motion-blocks');
+    if (motionData) {
+        e.preventDefault();
+        try {
+            const blocksData = JSON.parse(motionData);
+            const newBlocks = regenerateBlockIds(blocksData); // IDを再生成
+            
+            const targetWrapper = e.target.closest('.block-wrapper');
+            if (targetWrapper) {
+                const tempContainer = document.createElement('div');
+                renderBlocks(newBlocks, tempContainer);
+                
+                const fragment = document.createDocumentFragment();
+                while(tempContainer.firstChild) {
+                    fragment.appendChild(tempContainer.firstChild);
+                }
+                
+                // もし空の段落にペーストした場合は置き換え、それ以外は下に追加
+                const contentEl = targetWrapper.querySelector('.block-content');
+                if (targetWrapper.dataset.type === 'p' && contentEl && contentEl.textContent.trim() === '') {
+                    targetWrapper.replaceWith(fragment);
+                } else {
+                    targetWrapper.after(fragment);
+                }
+                
+                saveEditorState(true);
+                reinitSortables();
+                return;
+            }
+        } catch(err) {
+            console.error("Structured paste error", err);
+        }
+    }
+
+    // === 以下、既存の通常のテキスト・画像ペースト処理 ===
+    const items = clipboardData.items;
     for (let i = 0; i < items.length; i++) {
         if (items[i].type.indexOf('image') !== -1) {
             e.preventDefault();
             const file = items[i].getAsFile();
             const wrapper = e.target.closest('.block-wrapper');
-            if (file && wrapper) {
-                uploadAndInsertImage(file, wrapper);
-            }
+            if (file && wrapper) uploadAndInsertImage(file, wrapper);
             return;
         }
     }
@@ -1369,7 +1551,6 @@ function handleBlockPaste(e) {
     }
     saveEditorState(true);
 }
-
 document.addEventListener('click', (e) => {
     const a = e.target.closest('a');
     if (a && a.href) window.open(a.href, '_blank', 'noopener,noreferrer');
@@ -2025,3 +2206,76 @@ document.addEventListener('click', (e) => {
         }
     }
 });
+
+// ================= マウスドラッグでの複数選択機能 =================
+document.addEventListener('mousedown', (e) => {
+    if (!e.target.closest('#editor')) {
+        clearBlockSelection();
+        return;
+    }
+    const block = e.target.closest('.block-wrapper');
+    if (block && !e.shiftKey) {
+        if (selectedBlocks.size > 0) clearBlockSelection();
+        blockSelectionStartIdx = getFlatBlockElements().indexOf(block);
+        isBlockSelecting = true;
+    }
+});
+
+document.addEventListener('mousemove', (e) => {
+    if (!isBlockSelecting || blockSelectionStartIdx === -1) return;
+    if ((e.buttons & 1) === 0) { // 左クリックが離れたら終了
+        isBlockSelecting = false;
+        return;
+    }
+
+    const block = e.target.closest('.block-wrapper');
+    if (block) {
+        const blocks = getFlatBlockElements();
+        const currentIdx = blocks.indexOf(block);
+        
+        // 別のブロックに跨った瞬間にネイティブ選択を解除し、独自選択に切り替え
+        if (currentIdx !== -1 && currentIdx !== blockSelectionStartIdx) {
+            window.getSelection().removeAllRanges();
+            
+            const start = Math.min(blockSelectionStartIdx, currentIdx);
+            const end = Math.max(blockSelectionStartIdx, currentIdx);
+            
+            clearBlockSelection(false); 
+            for (let i = start; i <= end; i++) {
+                blocks[i].classList.add('selected-block');
+                selectedBlocks.add(blocks[i].dataset.id);
+            }
+        }
+    }
+});
+
+document.addEventListener('mouseup', () => { isBlockSelecting = false; });
+
+// ================= 構造化コピー＆カット =================
+function handleClipboard(e, isCut) {
+    if (selectedBlocks.size > 0) {
+        e.preventDefault();
+        const extracted = [];
+        const blocks = getFlatBlockElements();
+        
+        blocks.forEach(b => {
+            if (selectedBlocks.has(b.dataset.id)) {
+                const parentWrapper = b.parentElement.closest('.block-wrapper');
+                // 親が選択されていない最上位のブロックだけを抽出（ネスト重複を防ぐ）
+                if (!parentWrapper || !selectedBlocks.has(parentWrapper.dataset.id)) {
+                    extracted.push(extractSingleBlock(b));
+                }
+            }
+        });
+
+        const motionData = JSON.stringify(extracted);
+        const markdownText = convertBlocksToMarkdown(extracted);
+
+        e.clipboardData.setData('application/x-motion-blocks', motionData);
+        e.clipboardData.setData('text/plain', markdownText);
+        
+        if (isCut) deleteSelectedBlocks();
+    }
+}
+document.addEventListener('copy', (e) => handleClipboard(e, false));
+document.addEventListener('cut', (e) => handleClipboard(e, true));

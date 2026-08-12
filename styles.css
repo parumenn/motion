@@ -1374,3 +1374,10 @@ body.dark-mode #block-menu {
     z-index: 10; /* 他の要素より手前に配置する */
     cursor: pointer;
 }
+/* ================= 複数ブロック選択 ================= */
+.selected-block > .block-main {
+    background-color: rgba(35, 131, 226, 0.15) !important;
+}
+body.dark-mode .selected-block > .block-main {
+    background-color: rgba(35, 131, 226, 0.25) !important;
+}

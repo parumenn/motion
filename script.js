@@ -951,8 +951,8 @@ function renderBlocks(blockArray, container) {
         const main = document.createElement('div'); 
         main.className = 'block-main';
         
-        // 【修正】ドラッグ中(isDraggingBlock)でなければメニューを開くように制御
-        main.innerHTML = `<div class="drag-handle" onclick="if(!window.isDraggingBlock) showBlockMenu(event, this)"><svg class="icon"><use href="#icon-grip"></use></svg></div>`;
+        // 【修正】SortableJSに潰されないよう `onmouseup` でメニューを発火させる
+        main.innerHTML = `<div class="drag-handle" onmouseup="if(!window.isDraggingBlock) showBlockMenu(event, this)"><svg class="icon"><use href="#icon-grip"></use></svg></div>`;
         
         if (blockData.type === 'todo') { 
             const cb = document.createElement('div'); 
@@ -1081,11 +1081,11 @@ function reinitSortables() {
         handle: '.drag-handle', 
         animation: 150, 
         fallbackOnBody: true,
-        fallbackTolerance: 3, // 【追加】3px以下のマウスのブレはドラッグとみなさずクリックを通す
-        onStart: () => { window.isDraggingBlock = true; }, // 【追加】ドラッグ中フラグをON
+        fallbackTolerance: 3,
+        onStart: () => { window.isDraggingBlock = true; }, 
         onEnd: () => { 
-            // 【追加】ドラッグ終了後、少し遅延させてフラグをOFFにする
-            setTimeout(() => { window.isDraggingBlock = false; }, 50);
+            // 【修正】ドラッグ終了直後の誤作動を防ぐため、100msの猶予を持たせる
+            setTimeout(() => { window.isDraggingBlock = false; }, 100); 
             saveEditorState(true); 
         } 
     }));

@@ -950,8 +950,9 @@ function renderBlocks(blockArray, container) {
 
         const main = document.createElement('div'); 
         main.className = 'block-main';
-        // 変更箇所：drag-handleに onclick="showBlockMenu(event, this)" を追加
-        main.innerHTML = `<div class="drag-handle" onclick="showBlockMenu(event, this)"><svg class="icon"><use href="#icon-grip"></use></svg></div>`;
+        
+        // 【修正】ドラッグ中(isDraggingBlock)でなければメニューを開くように制御
+        main.innerHTML = `<div class="drag-handle" onclick="if(!window.isDraggingBlock) showBlockMenu(event, this)"><svg class="icon"><use href="#icon-grip"></use></svg></div>`;
         
         if (blockData.type === 'todo') { 
             const cb = document.createElement('div'); 
@@ -1072,9 +1073,25 @@ function handleNonTextKeydown(e) {
 }
 
 function reinitSortables() {
-    sortableInstances.forEach(s => s.destroy()); sortableInstances = [];
-    const initS = (el) => sortableInstances.push(new Sortable(el, { group: 'shared', handle: '.drag-handle', animation: 150, fallbackOnBody: true, onEnd: () => saveEditorState(true) }));
-    if(editorEl) initS(editorEl); document.querySelectorAll('#editor .block-children').forEach(el => initS(el));
+    sortableInstances.forEach(s => s.destroy()); 
+    sortableInstances = [];
+    
+    const initS = (el) => sortableInstances.push(new Sortable(el, { 
+        group: 'shared', 
+        handle: '.drag-handle', 
+        animation: 150, 
+        fallbackOnBody: true,
+        fallbackTolerance: 3, // 【追加】3px以下のマウスのブレはドラッグとみなさずクリックを通す
+        onStart: () => { window.isDraggingBlock = true; }, // 【追加】ドラッグ中フラグをON
+        onEnd: () => { 
+            // 【追加】ドラッグ終了後、少し遅延させてフラグをOFFにする
+            setTimeout(() => { window.isDraggingBlock = false; }, 50);
+            saveEditorState(true); 
+        } 
+    }));
+    
+    if(editorEl) initS(editorEl); 
+    document.querySelectorAll('#editor .block-children').forEach(el => initS(el));
 }
 
 function extractBlocks(container) {

@@ -70,8 +70,6 @@ async function savePrefs(key, value) {
 }
 
 // ================= 認証・初期化処理 =================
-// ================= 認証・初期化処理 =================
-// ================= 認証・初期化処理 =================
 async function initApp() {
     applyTheme();
     
@@ -80,24 +78,25 @@ async function initApp() {
     if (qualitySelect) qualitySelect.value = savedQuality;
 
     try {
-        // 1. セッションの取得（未ログインならcatchへ飛んでログインモーダルを表示）
         currentUser = await account.get();
         
-        // 2. アカウントの承認ステータスチェック
         try {
             const userDoc = await databases.getDocument(DB_ID, 'users', currentUser.$id);
             if (userDoc.status !== 'approved') {
-                // 【重要】セッションをその都度消してループさせず、専用の承認待ち画面で処理を止める
                 showPendingApprovalModal(currentUser.email);
                 return;
             }
         } catch (err) {
-            // ユーザーのドキュメントが見つからない場合も承認待ちとして扱う
             showPendingApprovalModal(currentUser?.email || '');
             return;
         }
 
-        // --- 以下、承認済みユーザーのみの初期化処理 ---
+        // --- 承認済みユーザー ---
+        // ログイン成功時にノート画面を表示する（完全分離対応）
+        document.getElementById('sidebar')?.classList.remove('hidden');
+        document.getElementById('main')?.classList.remove('hidden');
+        document.getElementById('login-overlay')?.classList.add('hidden');
+
         const userInfoText = document.getElementById('user-info-text');
         if (userInfoText) {
             userInfoText.textContent = `ログイン中: ${currentUser.name} (${currentUser.email})`;
@@ -108,20 +107,21 @@ async function initApp() {
             checkPendingUsersForAdmin();
         }
 
-// initApp() 内の currentUser の名前表示などをセットした直後に以下を追加
-try {
-    const prefs = await account.getPrefs();
-    if (prefs.theme) localStorage.setItem('local_workspace_theme', prefs.theme);
-    if (prefs.image_quality) localStorage.setItem('motion_image_quality', prefs.image_quality);
-    if (prefs.show_locked !== undefined) localStorage.setItem('motion_show_locked_in_home', prefs.show_locked);
-    if (prefs.search_locked !== undefined) localStorage.setItem('motion_search_locked', prefs.search_locked);
-} catch(e) { console.warn('設定の読み込みスキップ:', e); }
+        try {
+            const prefs = await account.getPrefs();
+            if (prefs.theme) localStorage.setItem('local_workspace_theme', prefs.theme);
+            if (prefs.image_quality) localStorage.setItem('motion_image_quality', prefs.image_quality);
+            if (prefs.show_locked !== undefined) localStorage.setItem('motion_show_locked_in_home', prefs.show_locked);
+            if (prefs.search_locked !== undefined) localStorage.setItem('motion_search_locked', prefs.search_locked);
+        } catch(e) { console.warn('設定の読み込みスキップ:', e); }
 
-applyTheme();
-const savedQuality = localStorage.getItem('motion_image_quality') || 'original';
-document.getElementById('setting-image-quality').value = savedQuality;
-document.getElementById('setting-show-locked').checked = (localStorage.getItem('motion_show_locked_in_home') === 'true');
-document.getElementById('setting-search-locked').checked = (localStorage.getItem('motion_search_locked') === 'true');
+        applyTheme();
+        const qualitySelectInput = document.getElementById('setting-image-quality');
+        if (qualitySelectInput) qualitySelectInput.value = localStorage.getItem('motion_image_quality') || 'original';
+        const showLockedInput = document.getElementById('setting-show-locked');
+        if (showLockedInput) showLockedInput.checked = (localStorage.getItem('motion_show_locked_in_home') === 'true');
+        const searchLockedInput = document.getElementById('setting-search-locked');
+        if (searchLockedInput) searchLockedInput.checked = (localStorage.getItem('motion_search_locked') === 'true');
 
         const savedUi = localStorage.getItem('motion_ui_state');
         if (savedUi) {
@@ -141,7 +141,6 @@ document.getElementById('setting-search-locked').checked = (localStorage.getItem
         openPage('home');
         calcStorageUsage();
     } catch (err) {
-        // 未ログイン時のエラー
         currentUser = null;
         showAuthModal();
     }
@@ -152,7 +151,10 @@ function showPendingApprovalModal(email) {
     const authOverlay = document.getElementById('login-overlay');
     if (!authOverlay) return;
 
-    // ログインフォーム部分を書き換えて、ループを防ぎながら「承認待ち」を通知する
+    // ノート画面を非表示にしてログイン画面を完全に分離する
+    document.getElementById('sidebar')?.classList.add('hidden');
+    document.getElementById('main')?.classList.add('hidden');
+
     const formContainer = document.querySelector('.login-form-container .modal');
     if (formContainer) {
         formContainer.innerHTML = `
@@ -174,6 +176,7 @@ function showPendingApprovalModal(email) {
     }
     authOverlay.classList.remove('hidden');
 }
+
 // イベントリスナー: 設定が変更されたらローカルストレージとクラウド両方に保存
 document.getElementById('setting-image-quality')?.addEventListener('change', (e) => {
     const val = e.target.value;
@@ -261,19 +264,20 @@ let tempAuthData = null; // OTP検証用データ保持
 
 function showAuthModal() {
     const authOverlay = document.getElementById('login-overlay');
-
-// パスワード表示切り替えイベントの設定
-    
-
     if (!authOverlay) return;
+
+    // ノート画面を非表示にしてログイン画面を完全に分離する
+    document.getElementById('sidebar')?.classList.add('hidden');
+    document.getElementById('main')?.classList.add('hidden');
 
     const usernameInput = document.getElementById('auth-username');
     const passwordInput = document.getElementById('auth-password');
     const authSubmit = document.getElementById('auth-submit-btn');
     const authToggle = document.getElementById('auth-toggle-btn');
     const authForm = document.getElementById('auth-form');
+    const confirmInput = document.getElementById('auth-password-confirm');
+    const confirmWrapper = document.getElementById('auth-password-confirm-wrapper');
 
-    // 6桁コード(OTP)入力用UIの動的追加
     let otpContainer = document.getElementById('otp-container');
     if (!otpContainer) {
         otpContainer = document.createElement('div');
@@ -293,12 +297,12 @@ function showAuthModal() {
         inputsWrapper = document.createElement('div');
         inputsWrapper.id = 'auth-inputs-wrapper';
         usernameInput.parentNode.insertBefore(inputsWrapper, usernameInput);
-        inputsWrapper.append(usernameInput, passwordInput, authSubmit, authToggle);
+        inputsWrapper.append(usernameInput, passwordInput.parentNode, confirmWrapper, authSubmit, authToggle);
     }
 
-    // 初期化
     usernameInput.value = '';
     passwordInput.value = '';
+    if (confirmInput) confirmInput.value = '';
     inputsWrapper.classList.remove('hidden');
     otpContainer.classList.add('hidden');
     authOverlay.classList.remove('hidden');
@@ -311,30 +315,26 @@ function showAuthModal() {
         authToggle.textContent = isSignUp ? 'ログインへ切替' : 'アカウント作成へ切替';
         usernameInput.value = '';
         passwordInput.value = '';
-        confirmInput.value = ''; // クリア処理
+        if (confirmInput) confirmInput.value = '';
         passwordInput.setAttribute('autocomplete', isSignUp ? 'new-password' : 'current-password');
         
-        // 確認用フィールドの表示/非表示を切り替え
         if (isSignUp) {
-            confirmWrapper.classList.remove('hidden');
+            confirmWrapper?.classList.remove('hidden');
         } else {
-            confirmWrapper.classList.add('hidden');
+            confirmWrapper?.classList.add('hidden');
         }
     };
 
-    // ログインまたはコード送信ボタン
-    // アカウント作成またはログインボタン
     authSubmit.onclick = async () => {
         const email = usernameInput.value.trim();
         const pass = passwordInput.value.trim();
-        const confirmPass = confirmInput.value.trim();
+        const confirmPass = confirmInput ? confirmInput.value.trim() : '';
 
         if (!email || !pass) return alert('メールアドレスとパスワードを入力してください');
         if (!email.includes('@') || !email.includes('.')) {
             return alert('有効なメールアドレスを入力してください');
         }
 
-        // ▼ 追加: アカウント作成時の一致チェックと最低文字数チェック
         if (isSignUp) {
             if (pass !== confirmPass) {
                 return alert('パスワードと確認用パスワードが一致しません');
@@ -345,47 +345,26 @@ function showAuthModal() {
         }
 
         try {
-if (isSignUp) {
-                // 1. Appwriteにアカウントを作成
+            if (isSignUp) {
                 const newUser = await account.create(ID.unique(), email, pass);
-                
-                // ★追加：DBに書き込む権限を得るため、作成直後に一時的にログインする
                 await account.createEmailSession(email, pass);
-                
-                // 2. データベースに「承認待ち」として登録
-                // ※自分自身 (newUser.$id) のみに更新・削除権限を絞ることでセキュリティを向上させます
                 await databases.createDocument(
-                    DB_ID, 
-                    'users', 
-                    newUser.$id, 
-                    { 
-                        email: email, 
-                        status: 'pending' 
-                    },
+                    DB_ID, 'users', newUser.$id, 
+                    { email: email, status: 'pending' },
                     [
-                        Permission.read(Role.any()),                 // 誰でも読み取り可能（管理者用）
-                        Permission.update(Role.user(newUser.$id)),   // 自分自身のみ更新可能
-                        Permission.delete(Role.user(newUser.$id))    // 自分自身のみ削除可能
+                        Permission.read(Role.any()),
+                        Permission.update(Role.user(newUser.$id)),
+                        Permission.delete(Role.user(newUser.$id))
                     ]
                 );
-                
-                // 3. 管理者へメール通知（擬似）
                 await sendAdminRequestEmail(email);
-
-                // 4. セッションを破棄（ログアウト）して承認待ち状態にする
                 await account.deleteSession('current');
-                
                 alert('アカウントを作成しました。管理者の承認をお待ちください。');
                 location.reload();
-            } else {                // 通常ログイン
+            } else {
                 try {
-                    // すでにセッションがあればあらかじめ削除しておく
                     await account.deleteSession('current');
-                } catch (e) {
-                    // セッションがない場合はエラーになるので無視する
-                }
-
-                // 新しくログインセッションを作成
+                } catch (e) {}
                 await account.createEmailSession(email, pass);
                 usernameInput.value = '';
                 passwordInput.value = '';
@@ -397,22 +376,14 @@ if (isSignUp) {
         }
     };
 
-    // 6桁コードの検証・申請完了処理
     document.getElementById('auth-otp-submit').onclick = async () => {
         const secret = document.getElementById('auth-otp').value.trim();
         if(!secret) return alert('認証コードを入力してください');
-        
         try {
             await account.createSession(tempAuthData.userId, secret);
-            
-            await databases.createDocument(DB_ID, 'users', tempAuthData.userId, { 
-                email: tempAuthData.email, 
-                status: 'pending' 
-            });
-            
+            await databases.createDocument(DB_ID, 'users', tempAuthData.userId, { email: tempAuthData.email, status: 'pending' });
             await sendAdminRequestEmail(tempAuthData.email);
             await account.deleteSession('current');
-            
             alert('管理者にアカウント開設のリクエストを送りました。承認されるまでお待ちください。');
             location.reload();
         } catch (e) {
@@ -427,6 +398,7 @@ if (isSignUp) {
         tempAuthData = null;
     };
 }
+
 document.getElementById('btn-change-pass')?.addEventListener('click', async () => {
     const oldPass = document.getElementById('change-pass-old').value;
     const newPass = document.getElementById('change-pass-new').value;
@@ -978,7 +950,8 @@ function renderBlocks(blockArray, container) {
 
         const main = document.createElement('div'); 
         main.className = 'block-main';
-        main.innerHTML = `<div class="drag-handle"><svg class="icon"><use href="#icon-grip"></use></svg></div>`;
+        // 変更箇所：drag-handleに onclick="showBlockMenu(event, this)" を追加
+        main.innerHTML = `<div class="drag-handle" onclick="showBlockMenu(event, this)"><svg class="icon"><use href="#icon-grip"></use></svg></div>`;
         
         if (blockData.type === 'todo') { 
             const cb = document.createElement('div'); 
@@ -1263,6 +1236,20 @@ function handleBlockKeydown(e) {
     } 
     else if (e.key === 'Backspace' && offset === 0) {
         e.preventDefault();
+        
+        // 【追加】コマンド付きブロックの場合は、まずプレーンテキスト（段落）に戻す
+        if (wrapper.dataset.type !== 'p' && wrapper.dataset.type !== 'page_link' && wrapper.dataset.type !== 'image') {
+            wrapper.dataset.type = 'p';
+            const mainEl = wrapper.querySelector(':scope > .block-main');
+            
+            mainEl?.querySelector('.todo-checkbox')?.remove();
+            mainEl?.querySelector('.toggle-icon')?.remove();
+            wrapper.classList.remove('checked', 'open');
+            
+            saveEditorState(true);
+            return; // 処理を終了し、前行との結合は行わない
+        }
+
         const allContents = getVisibleContents(); const idx = allContents.indexOf(contentEl);
         if (idx > 0) {
             const prevContent = allContents[idx - 1]; const prevWrapper = prevContent.closest('.block-wrapper');
@@ -1482,6 +1469,83 @@ function executeCommand(cmdId) {
         saveEditorState(true); reinitSortables();
     }
 }
+
+// ================= ブロックオプションメニュー =================
+let blockMenuTarget = null;
+const blockMenuEl = document.getElementById('block-menu');
+
+function showBlockMenu(e, handleEl) {
+    e.stopPropagation();
+    e.preventDefault();
+    blockMenuTarget = handleEl.closest('.block-wrapper');
+    if (!blockMenuTarget || !blockMenuEl) return;
+
+    const rect = handleEl.getBoundingClientRect();
+    blockMenuEl.style.top = `${rect.bottom + window.scrollY}px`;
+    blockMenuEl.style.left = `${rect.left + window.scrollX}px`;
+    blockMenuEl.classList.remove('hidden');
+}
+
+function executeBlockMenu(action) {
+    if (!blockMenuTarget) return;
+    const contentEl = blockMenuTarget.querySelector('.block-content');
+    
+    if (action === 'delete') {
+        if (blockMenuTarget.dataset.type === 'image') {
+            const imgEl = blockMenuTarget.querySelector('img');
+            const fileId = contentEl?.dataset.fileId;
+            deleteImageFromStorage(imgEl?.src, fileId);
+        }
+        blockMenuTarget.remove();
+        saveEditorState(true);
+    } else if (action === 'copy') {
+        // テキストコピー（構造化コピペはステップ2で実装します）
+        const textToCopy = contentEl ? contentEl.innerText : '';
+        navigator.clipboard.writeText(textToCopy).then(() => {
+            // 特にアラートは出さず、コピー成功とする
+        });
+    } else if (action === 'duplicate') {
+        const cloned = blockMenuTarget.cloneNode(true);
+        cloned.dataset.id = generateId();
+        blockMenuTarget.after(cloned);
+        saveEditorState(true);
+        reinitSortables();
+    } else {
+        // 変換処理 (p, h1, h2, todo, toggle)
+        const temp = document.createElement('div');
+        const extracted = { id: blockMenuTarget.dataset.id, type: action, content: contentEl ? contentEl.innerHTML : '', children: [] };
+        
+        if (action === 'toggle') {
+            extracted.toggleOpen = true; 
+            extracted.children = [{id: generateId(), type: 'p', content: '', children: []}];
+        }
+        // 子供を引き継ぐ
+        const currentChildren = extractBlocks(blockMenuTarget.querySelector(':scope > .block-children'));
+        if (currentChildren.length > 0) extracted.children = currentChildren;
+
+        renderBlocks([extracted], temp);
+        const newEl = temp.firstElementChild;
+        blockMenuTarget.replaceWith(newEl);
+        
+        const newContent = newEl.querySelector(':scope > .block-main > .block-content');
+        if (newContent) newContent.focus();
+        
+        saveEditorState(true);
+        reinitSortables();
+    }
+    
+    blockMenuEl.classList.add('hidden');
+    blockMenuTarget = null;
+}
+
+// 他の領域をクリックしたらブロックメニューを閉じる
+document.addEventListener('click', (e) => {
+    if (blockMenuEl && !blockMenuEl.classList.contains('hidden')) {
+        if (!e.target.closest('#block-menu')) {
+            blockMenuEl.classList.add('hidden');
+        }
+    }
+});
 
 document.getElementById('ext-link-cancel')?.addEventListener('click', () => {
     document.getElementById('ext-link-overlay').classList.add('hidden');

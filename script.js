@@ -1557,6 +1557,9 @@ function executeBlockMenu(action) {
 
 // 他の領域をクリックしたらブロックメニューを閉じる
 document.addEventListener('click', (e) => {
+    // 【追加】ドラッグハンドル（[::]）から発生した遅延clickイベントは無視する
+    if (e.target.closest('.drag-handle')) return;
+
     if (blockMenuEl && !blockMenuEl.classList.contains('hidden')) {
         if (!e.target.closest('#block-menu')) {
             blockMenuEl.classList.add('hidden');

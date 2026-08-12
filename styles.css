@@ -1369,3 +1369,8 @@ body.dark-mode #block-menu {
 #otp-container .cancel-btn:hover {
     background-color: var(--bg-hover) !important;
 }
+.block-handle {
+    position: relative;
+    z-index: 10; /* 他の要素より手前に配置する */
+    cursor: pointer;
+}

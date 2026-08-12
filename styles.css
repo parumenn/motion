@@ -1345,28 +1345,27 @@ body.dark-mode #block-menu {
 /* ================= ログイン画面のボタン視認性向上 ================= */
 #auth-form .primary-btn,
 #otp-container .primary-btn {
-    background: var(--accent); /* アクセントカラー(青系)で目立たせる */
-    color: #ffffff;
-    border: 1px solid var(--accent);
-    font-weight: 600;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+    background-color: #2383e2 !important; /* 強制的に青色背景 */
+    color: #ffffff !important;           /* 強制的に白文字 */
+    border: none !important;
+    font-weight: 600 !important;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2) !important;
 }
 
 #auth-form .primary-btn:hover,
 #otp-container .primary-btn:hover {
-    opacity: 0.9;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    opacity: 0.8 !important;
 }
 
 #auth-form .cancel-btn,
 #otp-container .cancel-btn {
-    background: var(--bg-hover); /* 背景から少し浮き出させる */
-    color: var(--text-main);
-    border: 1px solid var(--border);
-    font-weight: 600;
+    background-color: transparent !important; 
+    color: var(--text-main) !important;
+    border: 1px solid var(--border) !important;
+    font-weight: 600 !important;
 }
 
 #auth-form .cancel-btn:hover,
 #otp-container .cancel-btn:hover {
-    background: var(--border);
+    background-color: var(--bg-hover) !important;
 }

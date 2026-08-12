@@ -950,7 +950,8 @@ body.dark-mode .search-modal {
 /* ================= スラッシュメニュー・コンテキストメニュー ================= */
 
 #slash-menu,
-#context-menu {
+#context-menu,
+#block-menu {
     position: absolute;
     background: rgba(255, 255, 255, 0.88);
     backdrop-filter: blur(16px);
@@ -963,7 +964,8 @@ body.dark-mode .search-modal {
 }
 
 body.dark-mode #slash-menu,
-body.dark-mode #context-menu {
+body.dark-mode #context-menu,
+body.dark-mode #block-menu {
     background: rgba(30, 33, 39, 0.88);
     border: 1px solid rgba(255, 255, 255, 0.08);
 }

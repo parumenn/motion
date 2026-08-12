@@ -1341,3 +1341,32 @@ body.dark-mode #block-menu {
         max-width: 100%;
     }
 }
+
+/* ================= ログイン画面のボタン視認性向上 ================= */
+#auth-form .primary-btn,
+#otp-container .primary-btn {
+    background: var(--accent); /* アクセントカラー(青系)で目立たせる */
+    color: #ffffff;
+    border: 1px solid var(--accent);
+    font-weight: 600;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+}
+
+#auth-form .primary-btn:hover,
+#otp-container .primary-btn:hover {
+    opacity: 0.9;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+#auth-form .cancel-btn,
+#otp-container .cancel-btn {
+    background: var(--bg-hover); /* 背景から少し浮き出させる */
+    color: var(--text-main);
+    border: 1px solid var(--border);
+    font-weight: 600;
+}
+
+#auth-form .cancel-btn:hover,
+#otp-container .cancel-btn:hover {
+    background: var(--border);
+}

@@ -48,13 +48,17 @@ function extractSingleBlock(wrapper) {
     else if (type === 'image') content = contentEl?.querySelector('img')?.src || '';
 else if (type === 'table') {
         const rows = [];
-        wrapper.querySelectorAll('.motion-table tr').forEach(tr => {
+        const widths = [];
+        wrapper.querySelectorAll('.motion-table tr').forEach((tr, rIdx) => {
             const r = [];
-            tr.querySelectorAll('td').forEach(td => r.push(DOMPurify.sanitize(td.innerHTML, { ALLOWED_TAGS: ['br','b','i','u','s','span'] })));
+            tr.querySelectorAll('td').forEach((td, cIdx) => {
+                r.push(DOMPurify.sanitize(td.innerHTML, { ALLOWED_TAGS: ['br','b','i','u','s','span'] }));
+                if (rIdx === 0) widths.push(td.style.width || '');
+            });
             rows.push(r);
         });
-        content = JSON.stringify(rows);}
-    else if (contentEl) {
+        content = JSON.stringify({ widths, rows });
+    } else if (contentEl) {
         content = DOMPurify.sanitize(contentEl.innerHTML, { ALLOWED_TAGS: ['a','br','b','strong','i','em','u','s','strike','span'], ALLOWED_ATTR: ['href','target','rel','style','class'] });
     }
     
@@ -1169,32 +1173,41 @@ function renderBlocks(blockArray, container) {
             content.contentEditable = "false"; 
             content.tabIndex = 0;
             
-            // データが空ならデフォルトの2x2、パースエラーなら入力されていた文字を最初のセルへ
-            let tData = [["", ""], ["", ""]];
+            // 旧フォーマットと新フォーマットの互換性維持
+            let tData = { widths: [], rows: [["", ""], ["", ""]] };
             try { 
                 if (blockData.content) {
                     const parsed = JSON.parse(blockData.content);
-                    if (Array.isArray(parsed)) tData = parsed;
+                    if (Array.isArray(parsed)) tData.rows = parsed; // 古い配列フォーマット
+                    else if (parsed.rows) tData = parsed; // 新しいオブジェクトフォーマット
                 }
             } catch(e) {
-                if (blockData.content) tData[0][0] = blockData.content;
+                if (blockData.content) tData.rows[0][0] = blockData.content;
             }
-            if (!Array.isArray(tData) || tData.length === 0) tData = [["", ""], ["", ""]];
+            if (!Array.isArray(tData.rows) || tData.rows.length === 0) tData.rows = [["", ""], ["", ""]];
+            if (!tData.widths) tData.widths = [];
 
             const renderTable = (data) => {
                 content.innerHTML = '';
                 const table = document.createElement('table');
                 table.className = 'motion-table';
-                data.forEach((row, rIdx) => {
+                data.rows.forEach((row, rIdx) => {
                     const tr = document.createElement('tr');
                     row.forEach((cell, cIdx) => {
                         const td = document.createElement('td');
-                        td.contentEditable = "true"; // セルの中だけ編集可能にする
+                        td.contentEditable = "true";
                         td.innerHTML = cell;
+                        // 保存された幅があれば適用（1行目のみで列幅は決まる）
+                        if (rIdx === 0 && data.widths[cIdx]) td.style.width = data.widths[cIdx];
+                        
                         td.addEventListener('input', () => saveEditorState());
                         
-                        // セル内の矢印キー移動とエンター改行制御
                         td.addEventListener('keydown', (e) => {
+                            // ★修正1: セル内でのBackspace/Deleteはテーブル自体の削除を防止
+                            if (e.key === 'Backspace' || e.key === 'Delete') {
+                                e.stopPropagation();
+                            }
+                            
                             if (e.key === 'ArrowRight' && isCaretAtEnd(td)) {
                                 e.preventDefault(); const nextTd = td.nextElementSibling;
                                 if(nextTd) { nextTd.focus(); setCaretPosition(nextTd, 0); }
@@ -1216,19 +1229,55 @@ function renderBlocks(blockArray, container) {
                     table.appendChild(tr);
                 });
 
+                // ★修正2: マウスドラッグでの列幅リサイズ機能
+                table.addEventListener('mousemove', (e) => {
+                    if (e.target.tagName === 'TD') {
+                        const rect = e.target.getBoundingClientRect();
+                        // 右端の8px以内にカーソルがあればリサイズアイコンにする
+                        if (e.clientX > rect.right - 8) e.target.style.cursor = 'col-resize';
+                        else e.target.style.cursor = 'text';
+                    }
+                });
+                
+                table.addEventListener('mousedown', (e) => {
+                    if (e.target.tagName === 'TD') {
+                        const rect = e.target.getBoundingClientRect();
+                        if (e.clientX > rect.right - 8) {
+                            e.preventDefault(); // テキスト選択を防ぐ
+                            const resizingTd = e.target;
+                            const startX = e.clientX;
+                            const startWidth = rect.width;
+                            const cellIndex = resizingTd.cellIndex;
+                            const firstRowTd = table.rows[0].cells[cellIndex];
+                            
+                            const onMouseMove = (moveEvt) => {
+                                const newWidth = Math.max(30, startWidth + (moveEvt.clientX - startX));
+                                if (firstRowTd) firstRowTd.style.width = `${newWidth}px`;
+                            };
+                            const onMouseUp = () => {
+                                document.removeEventListener('mousemove', onMouseMove);
+                                document.removeEventListener('mouseup', onMouseUp);
+                                saveEditorState(); // リサイズ完了後に保存
+                            };
+                            document.addEventListener('mousemove', onMouseMove);
+                            document.addEventListener('mouseup', onMouseUp);
+                        }
+                    }
+                });
+
                 // 行・列の追加削除ボタン群
                 const controls = document.createElement('div');
                 controls.className = 'table-controls';
                 controls.contentEditable = "false";
                 
                 const addRow = document.createElement('button'); addRow.textContent = '+ 行';
-                addRow.onclick = () => { data.push(new Array(data[0].length).fill('')); renderTable(data); saveEditorState(true); };
+                addRow.onclick = () => { data.rows.push(new Array(data.rows[0].length).fill('')); renderTable(data); saveEditorState(true); };
                 const addCol = document.createElement('button'); addCol.textContent = '+ 列';
-                addCol.onclick = () => { data.forEach(r => r.push('')); renderTable(data); saveEditorState(true); };
+                addCol.onclick = () => { data.rows.forEach(r => r.push('')); data.widths.push(''); renderTable(data); saveEditorState(true); };
                 const delRow = document.createElement('button'); delRow.textContent = '- 行';
-                delRow.onclick = () => { if(data.length > 1) { data.pop(); renderTable(data); saveEditorState(true); } };
+                delRow.onclick = () => { if(data.rows.length > 1) { data.rows.pop(); renderTable(data); saveEditorState(true); } };
                 const delCol = document.createElement('button'); delCol.textContent = '- 列';
-                delCol.onclick = () => { if(data[0].length > 1) { data.forEach(r => r.pop()); renderTable(data); saveEditorState(true); } };
+                delCol.onclick = () => { if(data.rows[0].length > 1) { data.rows.forEach(r => r.pop()); data.widths.pop(); renderTable(data); saveEditorState(true); } };
                 
                 controls.append(addRow, addCol, delRow, delCol);
                 content.append(table, controls);
@@ -1236,10 +1285,7 @@ function renderBlocks(blockArray, container) {
             
             renderTable(tData);
             content.addEventListener('keydown', handleNonTextKeydown); // 全体削除用
-        }
-
-
- else {
+        } else {
             content.contentEditable = "true"; 
             content.innerHTML = blockData.content || '';
             content.addEventListener('keydown', handleBlockKeydown); 
@@ -1357,14 +1403,17 @@ function extractBlocks(container) {
         else if (type === 'image') content = contentEl?.querySelector('img')?.src || '';
 else if (type === 'table') {
             const rows = [];
-            wrapper.querySelectorAll('.motion-table tr').forEach(tr => {
+            const widths = [];
+            wrapper.querySelectorAll('.motion-table tr').forEach((tr, rIdx) => {
                 const r = [];
-                tr.querySelectorAll('td').forEach(td => r.push(DOMPurify.sanitize(td.innerHTML, { ALLOWED_TAGS: ['br','b','i','u','s','span'] })));
+                tr.querySelectorAll('td').forEach((td, cIdx) => {
+                    r.push(DOMPurify.sanitize(td.innerHTML, { ALLOWED_TAGS: ['br','b','i','u','s','span'] }));
+                    if (rIdx === 0) widths.push(td.style.width || '');
+                });
                 rows.push(r);
             });
-            content = JSON.stringify(rows);
-        }
-        else if (contentEl) {
+            content = JSON.stringify({ widths, rows });
+        } else if (contentEl) {
             content = DOMPurify.sanitize(contentEl.innerHTML, { ALLOWED_TAGS: ['a','br','b','strong','i','em','u','s','strike','span'], ALLOWED_ATTR: ['href','target','rel','style','class'] });
         }
         return { 

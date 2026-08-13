@@ -706,6 +706,44 @@ document.addEventListener('keydown', (e) => {
         clearBlockSelection();
     }
 
+    // ★追加: 複数選択モード中の Shift + 上下矢印キーによる範囲拡縮
+    if (selectedBlocks.size > 0 && e.shiftKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+        e.preventDefault();
+        const blocks = getFlatBlockElements();
+        const selectedArray = blocks.filter(b => selectedBlocks.has(b.dataset.id));
+        if (selectedArray.length === 0) return;
+
+        const firstIdx = blocks.indexOf(selectedArray[0]);
+        const lastIdx = blocks.indexOf(selectedArray[selectedArray.length - 1]);
+
+        if (e.key === 'ArrowUp') {
+            if (lastIdx > blockSelectionStartIdx) {
+                // 下に伸びていた選択範囲を縮める
+                const target = blocks[lastIdx];
+                target.classList.remove('selected-block');
+                selectedBlocks.delete(target.dataset.id);
+            } else if (firstIdx > 0) {
+                // 上に拡張する
+                const target = blocks[firstIdx - 1];
+                target.classList.add('selected-block');
+                selectedBlocks.add(target.dataset.id);
+            }
+        } else if (e.key === 'ArrowDown') {
+            if (firstIdx < blockSelectionStartIdx) {
+                // 上に伸びていた選択範囲を縮める
+                const target = blocks[firstIdx];
+                target.classList.remove('selected-block');
+                selectedBlocks.delete(target.dataset.id);
+            } else if (lastIdx < blocks.length - 1) {
+                // 下に拡張する
+                const target = blocks[lastIdx + 1];
+                target.classList.add('selected-block');
+                selectedBlocks.add(target.dataset.id);
+            }
+        }
+        return;
+    }
+
     if (e.key === 'Escape') {
         if (selectedBlocks.size > 0) {
             clearBlockSelection();
@@ -1330,6 +1368,40 @@ function handleBlockKeydown(e) {
     const contentEl = e.target; const wrapper = contentEl.closest('.block-wrapper');
     const offset = getCaretOffset(contentEl); const textLen = contentEl.textContent.length;
 
+    // ★追加: Shift + 矢印キーでブロック境界を超えた際のシームレスな複数選択モードへの移行
+    if (e.shiftKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+        const allContents = getVisibleContents();
+        const idx = allContents.indexOf(contentEl);
+        let targetIdx = -1;
+
+        // キャレットが先頭で 上/左 を押した場合、または末尾で 下/右 を押した場合
+        if ((e.key === 'ArrowUp' || e.key === 'ArrowLeft') && offset === 0 && idx > 0) {
+            targetIdx = idx - 1;
+        } else if ((e.key === 'ArrowDown' || e.key === 'ArrowRight') && offset === textLen && idx < allContents.length - 1) {
+            targetIdx = idx + 1;
+        }
+
+        if (targetIdx !== -1) {
+            e.preventDefault();
+            const currentBlock = wrapper;
+            const targetBlock = allContents[targetIdx].closest('.block-wrapper');
+            const blocks = getFlatBlockElements();
+            
+            // 選択の基点（Pivot）を記録
+            blockSelectionStartIdx = blocks.indexOf(currentBlock);
+            
+            // テキストカーソルを消去し、ブロック選択状態に切り替え
+            window.getSelection().removeAllRanges();
+            clearBlockSelection(false);
+            
+            currentBlock.classList.add('selected-block');
+            selectedBlocks.add(currentBlock.dataset.id);
+            targetBlock.classList.add('selected-block');
+            selectedBlocks.add(targetBlock.dataset.id);
+            return;
+        }
+    }
+
     if (e.key === 'Tab') {
         e.preventDefault();
         if (e.shiftKey) {
@@ -1350,7 +1422,13 @@ function handleBlockKeydown(e) {
     }
 
     if (e.key === 'Enter') {
-        if (e.shiftKey) { e.preventDefault(); insertNodeAtCaret(document.createElement('br')); saveEditorState(); return; }
+        // ★修正: ブラウザ標準のリッチテキスト改行コマンドを使用
+        if (e.shiftKey) { 
+            e.preventDefault(); 
+            document.execCommand('insertLineBreak'); 
+            saveEditorState(true); 
+            return; 
+        }
         e.preventDefault();
         
         const isEmpty = contentEl.textContent.trim() === '';

@@ -53,7 +53,7 @@ else if (type === 'table') {
             tr.querySelectorAll('td').forEach(td => r.push(DOMPurify.sanitize(td.innerHTML, { ALLOWED_TAGS: ['br','b','i','u','s','span'] })));
             rows.push(r);
         });
-        cont
+        content = JSON.stringify(rows);
     else if (contentEl) {
         content = DOMPurify.sanitize(contentEl.innerHTML, { ALLOWED_TAGS: ['a','br','b','strong','i','em','u','s','strike','span'], ALLOWED_ATTR: ['href','target','rel','style','class'] });
     }

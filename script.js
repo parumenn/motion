@@ -1477,7 +1477,7 @@ function handleBlockKeydown(e) {
         newEl.querySelector('.block-content').focus();
         saveEditorState(true); reinitSortables();
     } 
-    else if (e.key === 'Backspace' && offset === 0) {
+    else if (e.key === 'Backspace' && offset === 0 && window.getSelection().isCollapsed) {
         e.preventDefault();
         
         // 【追加】コマンド付きブロックの場合は、まずプレーンテキスト（段落）に戻す
@@ -1514,7 +1514,7 @@ function handleBlockKeydown(e) {
             }
         }
     }
-    else if (e.key === 'Delete' && offset === textLen) {
+    else if (e.key === 'Delete' && offset === textLen && window.getSelection().isCollapsed) {
         e.preventDefault();
         const allContents = getVisibleContents(); const idx = allContents.indexOf(contentEl);
         if (idx < allContents.length - 1) {

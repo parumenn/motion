@@ -2,6 +2,7 @@ const DB_KEY = 'local_workspace_data';
 const COMMANDS = [
     { id: 'image', label: 'Image', desc: '画像を挿入', keys: ['image', '画像', 'pic'] },
     { id: 'link', label: 'Web Link', desc: 'Webリンクを挿入', keys: ['link', 'リンク'] },
+    { id: 'table', label: 'Table', desc: '表を追加', keys: ['table', '表', 'ひょう'] }, // ★追加
     { id: 'page', label: 'Page', desc: 'サブページを作成', keys: ['page', 'ページ'] },
     { id: 'linkpage', label: 'Link to Page', desc: '既存ページへのリンク', keys: ['linkpage', 'ページリンク'] },
     { id: 'h1', label: 'Heading 1', desc: '大見出し', keys: ['h1', '見出し1'] },
@@ -45,6 +46,14 @@ function extractSingleBlock(wrapper) {
     let content = '';
     if (type === 'page_link') content = contentEl?.dataset.linkId || '';
     else if (type === 'image') content = contentEl?.querySelector('img')?.src || '';
+else if (type === 'table') {
+        const rows = [];
+        wrapper.querySelectorAll('.motion-table tr').forEach(tr => {
+            const r = [];
+            tr.querySelectorAll('td').forEach(td => r.push(DOMPurify.sanitize(td.innerHTML, { ALLOWED_TAGS: ['br','b','i','u','s','span'] })));
+            rows.push(r);
+        });
+        cont
     else if (contentEl) {
         content = DOMPurify.sanitize(contentEl.innerHTML, { ALLOWED_TAGS: ['a','br','b','strong','i','em','u','s','strike','span'], ALLOWED_ATTR: ['href','target','rel','style','class'] });
     }
@@ -1156,7 +1165,81 @@ function renderBlocks(blockArray, container) {
             content.innerHTML = `<img src="${blockData.content}" alt="画像">`;
             content.onclick = () => content.focus();
             content.addEventListener('keydown', handleNonTextKeydown);
-        } else {
+        }else if (blockData.type === 'table') {
+            content.contentEditable = "false"; 
+            content.tabIndex = 0;
+            
+            // データが空ならデフォルトの2x2、パースエラーなら入力されていた文字を最初のセルへ
+            let tData = [["", ""], ["", ""]];
+            try { 
+                if (blockData.content) {
+                    const parsed = JSON.parse(blockData.content);
+                    if (Array.isArray(parsed)) tData = parsed;
+                }
+            } catch(e) {
+                if (blockData.content) tData[0][0] = blockData.content;
+            }
+            if (!Array.isArray(tData) || tData.length === 0) tData = [["", ""], ["", ""]];
+
+            const renderTable = (data) => {
+                content.innerHTML = '';
+                const table = document.createElement('table');
+                table.className = 'motion-table';
+                data.forEach((row, rIdx) => {
+                    const tr = document.createElement('tr');
+                    row.forEach((cell, cIdx) => {
+                        const td = document.createElement('td');
+                        td.contentEditable = "true"; // セルの中だけ編集可能にする
+                        td.innerHTML = cell;
+                        td.addEventListener('input', () => saveEditorState());
+                        
+                        // セル内の矢印キー移動とエンター改行制御
+                        td.addEventListener('keydown', (e) => {
+                            if (e.key === 'ArrowRight' && isCaretAtEnd(td)) {
+                                e.preventDefault(); const nextTd = td.nextElementSibling;
+                                if(nextTd) { nextTd.focus(); setCaretPosition(nextTd, 0); }
+                            } else if (e.key === 'ArrowLeft' && isCaretAtStart(td)) {
+                                e.preventDefault(); const prevTd = td.previousElementSibling;
+                                if(prevTd) { prevTd.focus(); setCaretPosition(prevTd, prevTd.textContent.length); }
+                            } else if (e.key === 'ArrowDown') {
+                                const nextTr = tr.nextElementSibling;
+                                if(nextTr && nextTr.children[cIdx]) { e.preventDefault(); nextTr.children[cIdx].focus(); }
+                            } else if (e.key === 'ArrowUp') {
+                                const prevTr = tr.previousElementSibling;
+                                if(prevTr && prevTr.children[cIdx]) { e.preventDefault(); prevTr.children[cIdx].focus(); }
+                            } else if (e.key === 'Enter') {
+                                e.preventDefault(); document.execCommand('insertLineBreak'); saveEditorState(true);
+                            }
+                        });
+                        tr.appendChild(td);
+                    });
+                    table.appendChild(tr);
+                });
+
+                // 行・列の追加削除ボタン群
+                const controls = document.createElement('div');
+                controls.className = 'table-controls';
+                controls.contentEditable = "false";
+                
+                const addRow = document.createElement('button'); addRow.textContent = '+ 行';
+                addRow.onclick = () => { data.push(new Array(data[0].length).fill('')); renderTable(data); saveEditorState(true); };
+                const addCol = document.createElement('button'); addCol.textContent = '+ 列';
+                addCol.onclick = () => { data.forEach(r => r.push('')); renderTable(data); saveEditorState(true); };
+                const delRow = document.createElement('button'); delRow.textContent = '- 行';
+                delRow.onclick = () => { if(data.length > 1) { data.pop(); renderTable(data); saveEditorState(true); } };
+                const delCol = document.createElement('button'); delCol.textContent = '- 列';
+                delCol.onclick = () => { if(data[0].length > 1) { data.forEach(r => r.pop()); renderTable(data); saveEditorState(true); } };
+                
+                controls.append(addRow, addCol, delRow, delCol);
+                content.append(table, controls);
+            };
+            
+            renderTable(tData);
+            content.addEventListener('keydown', handleNonTextKeydown); // 全体削除用
+        }
+
+
+ else {
             content.contentEditable = "true"; 
             content.innerHTML = blockData.content || '';
             content.addEventListener('keydown', handleBlockKeydown); 
@@ -1272,6 +1355,15 @@ function extractBlocks(container) {
         let content = '';
         if (type === 'page_link') content = contentEl?.dataset.linkId || '';
         else if (type === 'image') content = contentEl?.querySelector('img')?.src || '';
+else if (type === 'table') {
+            const rows = [];
+            wrapper.querySelectorAll('.motion-table tr').forEach(tr => {
+                const r = [];
+                tr.querySelectorAll('td').forEach(td => r.push(DOMPurify.sanitize(td.innerHTML, { ALLOWED_TAGS: ['br','b','i','u','s','span'] })));
+                rows.push(r);
+            });
+            content = JSON.stringify(rows);
+        }
         else if (contentEl) {
             content = DOMPurify.sanitize(contentEl.innerHTML, { ALLOWED_TAGS: ['a','br','b','strong','i','em','u','s','strike','span'], ALLOWED_ATTR: ['href','target','rel','style','class'] });
         }

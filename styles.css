@@ -1,6 +1,3 @@
-ChatGPT:
-重複していたパスワード関連CSSを統合し、不要な !important、z-index の上書き、フォーカス表示の問題などを整理しました。基本的な見た目・動作は維持する方針です。
-
 :root {
     --bg-main: #ffffff;
     --bg-sidebar: #f7f7f5;
@@ -1258,7 +1255,6 @@ body.dark-mode #block-menu {
     }
 }
 
-```css
 /* ================= 認証フォーム ================= */
 
 .login-form-container {

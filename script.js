@@ -17,6 +17,7 @@ let pendingImageTargetBlock = null;
 
 let currentMediaBytes = 0;
 const MAX_MEDIA_BYTES = 500 * 1024 * 1024; // 500MB 上限
+
 // ================= 複数ブロック選択・コピペ用の状態と補助関数 =================
 let selectedBlocks = new Set();
 let isBlockSelecting = false;
@@ -199,7 +200,6 @@ async function initApp() {
         }
 
         // --- 承認済みユーザー ---
-        // ログイン成功時にノート画面を表示する（完全分離対応）
         document.getElementById('sidebar')?.classList.remove('hidden');
         document.getElementById('main')?.classList.remove('hidden');
         document.getElementById('login-overlay')?.classList.add('hidden');
@@ -258,7 +258,6 @@ function showPendingApprovalModal(email) {
     const authOverlay = document.getElementById('login-overlay');
     if (!authOverlay) return;
 
-    // ノート画面を非表示にしてログイン画面を完全に分離する
     document.getElementById('sidebar')?.classList.add('hidden');
     document.getElementById('main')?.classList.add('hidden');
 
@@ -342,38 +341,35 @@ async function calcStorageUsage() {
 
     usageText.innerHTML = `テキストデータ: ${formatBytes(textBytes)}<br>添付ファイル: ${formatBytes(currentMediaBytes)}`;
     
-    // プログレスバーの更新処理
-if (limitText && barFill) {
-    const percent = Math.min((currentMediaBytes / MAX_MEDIA_BYTES) * 100, 100);
-    barFill.style.width = `${percent}%`;
-    barFill.classList.remove('warning', 'danger');
-    
-    const warningText = document.getElementById('storage-warning-text');
-    
-    if (percent >= 90) {
-        barFill.classList.add('danger');
-        if(warningText) warningText.classList.remove('hidden'); // 90%超過で警告表示
+    if (limitText && barFill) {
+        const percent = Math.min((currentMediaBytes / MAX_MEDIA_BYTES) * 100, 100);
+        barFill.style.width = `${percent}%`;
+        barFill.classList.remove('warning', 'danger');
+        
+        const warningText = document.getElementById('storage-warning-text');
+        
+        if (percent >= 90) {
+            barFill.classList.add('danger');
+            if(warningText) warningText.classList.remove('hidden');
+        }
+        else if (percent >= 70) {
+            barFill.classList.add('warning');
+            if(warningText) warningText.classList.add('hidden');
+        } else {
+            if(warningText) warningText.classList.add('hidden');
+        }
+        
+        limitText.textContent = `${formatBytes(currentMediaBytes)} / 500.00 MB (${percent.toFixed(1)}%)`;
     }
-    else if (percent >= 70) {
-        barFill.classList.add('warning');
-        if(warningText) warningText.classList.add('hidden');
-    } else {
-        if(warningText) warningText.classList.add('hidden');
-    }
-    
-    limitText.textContent = `${formatBytes(currentMediaBytes)} / 500.00 MB (${percent.toFixed(1)}%)`;
-}
 }
 
 const usernameToEmail = (username) => `${username.toLowerCase()}@motion.local`;
-
-let tempAuthData = null; // OTP検証用データ保持
+let tempAuthData = null;
 
 function showAuthModal() {
     const authOverlay = document.getElementById('login-overlay');
     if (!authOverlay) return;
 
-    // ノート画面を非表示にしてログイン画面を完全に分離する
     document.getElementById('sidebar')?.classList.add('hidden');
     document.getElementById('main')?.classList.add('hidden');
 
@@ -594,7 +590,6 @@ async function createPageInAppwrite(page) {
         isLocked: page.isLocked || false
     };
 
-    // ログイン中のユーザーID（currentUser.$id）に対してのみ、読み・書き・削除を許可する
     const permissions = [
         Permission.read(Role.user(currentUser.$id)),
         Permission.update(Role.user(currentUser.$id)),
@@ -666,7 +661,6 @@ document.getElementById('setting-search-locked')?.addEventListener('change', (e)
     savePrefs('search_locked', val);
 });
 
-
 function applyTheme() {
     const theme = localStorage.getItem('local_workspace_theme') || 'light';
     document.body.classList.toggle('dark-mode', theme === 'dark');
@@ -701,12 +695,10 @@ function executeRedo(pageId) {
 }
 
 document.addEventListener('keydown', (e) => {
-    // 選択中に何らかのキー(文字など)が押されたら選択解除する
     if (selectedBlocks.size > 0 && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
         clearBlockSelection();
     }
 
-    // ★追加: 複数選択モード中の Shift + 上下矢印キーによる範囲拡縮
     if (selectedBlocks.size > 0 && e.shiftKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
         e.preventDefault();
         const blocks = getFlatBlockElements();
@@ -718,24 +710,20 @@ document.addEventListener('keydown', (e) => {
 
         if (e.key === 'ArrowUp') {
             if (lastIdx > blockSelectionStartIdx) {
-                // 下に伸びていた選択範囲を縮める
                 const target = blocks[lastIdx];
                 target.classList.remove('selected-block');
                 selectedBlocks.delete(target.dataset.id);
             } else if (firstIdx > 0) {
-                // 上に拡張する
                 const target = blocks[firstIdx - 1];
                 target.classList.add('selected-block');
                 selectedBlocks.add(target.dataset.id);
             }
         } else if (e.key === 'ArrowDown') {
             if (firstIdx < blockSelectionStartIdx) {
-                // 上に伸びていた選択範囲を縮める
                 const target = blocks[firstIdx];
                 target.classList.remove('selected-block');
                 selectedBlocks.delete(target.dataset.id);
             } else if (lastIdx < blocks.length - 1) {
-                // 下に拡張する
                 const target = blocks[lastIdx + 1];
                 target.classList.add('selected-block');
                 selectedBlocks.add(target.dataset.id);
@@ -760,21 +748,18 @@ document.addEventListener('keydown', (e) => {
         return;
     }
 
-    // ★追加: 複数選択時の一括削除 (Backspace / Delete)
     if ((e.key === 'Backspace' || e.key === 'Delete') && selectedBlocks.size > 0) {
         e.preventDefault();
         deleteSelectedBlocks();
         return;
     }
 
-    // ★追加: Ctrl+A (全選択) のスマート対応
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
         const inEditor = e.target.closest('#editor');
         if (inEditor || selectedBlocks.size > 0) {
             const now = Date.now();
             const activeBlock = document.activeElement.closest('.block-wrapper');
             
-            // 500ms以内に連続入力されたか、カーソルがない状態なら全体を選択
             if (now - lastCtrlATime < 500 || (!activeBlock && selectedBlocks.size === 0)) {
                 e.preventDefault();
                 window.getSelection().removeAllRanges();
@@ -785,7 +770,6 @@ document.addEventListener('keydown', (e) => {
                     selectedBlocks.add(b.dataset.id);
                 });
             } else {
-                // 1回目のCtrl+A: ブロック内のテキスト全選択（ネイティブ）
                 if (selectedBlocks.size > 0) clearBlockSelection();
             }
             lastCtrlATime = now;
@@ -1137,7 +1121,6 @@ function renderBlocks(blockArray, container) {
         const main = document.createElement('div'); 
         main.className = 'block-main';
         
-        // 【修正】SortableJSに潰されないよう `onmouseup` でメニューを発火させる
         main.innerHTML = `<div class="drag-handle" onmouseup="if(!window.isDraggingBlock) showBlockMenu(event, this)"><svg class="icon"><use href="#icon-grip"></use></svg></div>`;
         
         if (blockData.type === 'todo') { 
@@ -1270,7 +1253,6 @@ function reinitSortables() {
         fallbackTolerance: 3,
         onStart: () => { window.isDraggingBlock = true; }, 
         onEnd: () => { 
-            // 【修正】ドラッグ終了直後の誤作動を防ぐため、100msの猶予を持たせる
             setTimeout(() => { window.isDraggingBlock = false; }, 100); 
             saveEditorState(true); 
         } 
@@ -1321,12 +1303,6 @@ function saveEditorState(isStructuralChange = false) {
     }
 }
 
-function getCaretOffset(element) {
-    const sel = window.getSelection(); if (sel.rangeCount === 0) return 0;
-    const range = sel.getRangeAt(0); const preCaretRange = range.cloneRange();
-    preCaretRange.selectNodeContents(element); preCaretRange.setEnd(range.endContainer, range.endOffset);
-    return preCaretRange.toString().length;
-}
 function setCaretPosition(el, pos) {
     const range = document.createRange(); const sel = window.getSelection();
     let charIndex = 0, nodeStack = [el], node, found = false;
@@ -1342,6 +1318,7 @@ function setCaretPosition(el, pos) {
     }
     range.collapse(true); sel.removeAllRanges(); sel.addRange(range);
 }
+
 function insertNodeAtCaret(node) {
     const sel = window.getSelection(); if (!sel.rangeCount) return;
     const range = sel.getRangeAt(0); range.deleteContents();
@@ -1349,12 +1326,34 @@ function insertNodeAtCaret(node) {
     range.insertNode(node);
     if (lastNode) { range.setStartAfter(lastNode); range.collapse(true); sel.removeAllRanges(); sel.addRange(range); }
 }
+
 function getVisibleContents() { 
     return Array.from(document.querySelectorAll('#editor .block-content')).filter(el => el.getBoundingClientRect().height > 0); 
 }
 
 const slashMenuEl = document.getElementById('slash-menu');
 let slashQuery = null, slashTargetBlock = null;
+
+// ================= ブロック境界の正確な判定関数 =================
+function isCaretAtStart(el) {
+    const sel = window.getSelection(); if (!sel.rangeCount) return false;
+    const range = sel.getRangeAt(0); const preRange = document.createRange();
+    preRange.selectNodeContents(el); preRange.setEnd(range.startContainer, range.startOffset);
+    const tmp = document.createElement('div'); tmp.appendChild(preRange.cloneContents());
+    return tmp.textContent.length === 0 && tmp.querySelector('img, br') === null;
+}
+
+function isCaretAtEnd(el) {
+    const sel = window.getSelection(); if (!sel.rangeCount) return false;
+    const range = sel.getRangeAt(0); const postRange = document.createRange();
+    postRange.selectNodeContents(el); postRange.setStart(range.endContainer, range.endOffset);
+    const tmp = document.createElement('div'); tmp.appendChild(postRange.cloneContents());
+    return tmp.textContent.length === 0 && tmp.querySelector('img, br') === null;
+}
+
+function isBlockEmpty(el) {
+    return el.textContent.length === 0 && el.querySelector('img') === null;
+}
 
 function handleBlockKeydown(e) {
     if (e.isComposing) return;
@@ -1366,18 +1365,20 @@ function handleBlockKeydown(e) {
     }
 
     const contentEl = e.target; const wrapper = contentEl.closest('.block-wrapper');
-    const offset = getCaretOffset(contentEl); const textLen = contentEl.textContent.length;
+    
+    const isCollapsed = window.getSelection().isCollapsed;
+    const empty = isBlockEmpty(contentEl);
+    const atStart = empty || isCaretAtStart(contentEl);
+    const atEnd = empty || isCaretAtEnd(contentEl);
 
-    // ★追加: Shift + 矢印キーでブロック境界を超えた際のシームレスな複数選択モードへの移行
     if (e.shiftKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
         const allContents = getVisibleContents();
         const idx = allContents.indexOf(contentEl);
         let targetIdx = -1;
 
-        // キャレットが先頭で 上/左 を押した場合、または末尾で 下/右 を押した場合
-        if ((e.key === 'ArrowUp' || e.key === 'ArrowLeft') && offset === 0 && idx > 0) {
+        if ((e.key === 'ArrowUp' || e.key === 'ArrowLeft') && atStart && idx > 0) {
             targetIdx = idx - 1;
-        } else if ((e.key === 'ArrowDown' || e.key === 'ArrowRight') && offset === textLen && idx < allContents.length - 1) {
+        } else if ((e.key === 'ArrowDown' || e.key === 'ArrowRight') && atEnd && idx < allContents.length - 1) {
             targetIdx = idx + 1;
         }
 
@@ -1387,10 +1388,8 @@ function handleBlockKeydown(e) {
             const targetBlock = allContents[targetIdx].closest('.block-wrapper');
             const blocks = getFlatBlockElements();
             
-            // 選択の基点（Pivot）を記録
             blockSelectionStartIdx = blocks.indexOf(currentBlock);
             
-            // テキストカーソルを消去し、ブロック選択状態に切り替え
             window.getSelection().removeAllRanges();
             clearBlockSelection(false);
             
@@ -1422,7 +1421,6 @@ function handleBlockKeydown(e) {
     }
 
     if (e.key === 'Enter') {
-        // ★修正: ブラウザ標準のリッチテキスト改行コマンドを使用
         if (e.shiftKey) { 
             e.preventDefault(); 
             document.execCommand('insertLineBreak'); 
@@ -1477,10 +1475,9 @@ function handleBlockKeydown(e) {
         newEl.querySelector('.block-content').focus();
         saveEditorState(true); reinitSortables();
     } 
-    else if (e.key === 'Backspace' && offset === 0 && window.getSelection().isCollapsed) {
+    else if (e.key === 'Backspace' && isCollapsed && atStart) {
         e.preventDefault();
         
-        // 【追加】コマンド付きブロックの場合は、まずプレーンテキスト（段落）に戻す
         if (wrapper.dataset.type !== 'p' && wrapper.dataset.type !== 'page_link' && wrapper.dataset.type !== 'image') {
             wrapper.dataset.type = 'p';
             const mainEl = wrapper.querySelector(':scope > .block-main');
@@ -1490,7 +1487,7 @@ function handleBlockKeydown(e) {
             wrapper.classList.remove('checked', 'open');
             
             saveEditorState(true);
-            return; // 処理を終了し、前行との結合は行わない
+            return;
         }
 
         const allContents = getVisibleContents(); const idx = allContents.indexOf(contentEl);
@@ -1514,8 +1511,9 @@ function handleBlockKeydown(e) {
             }
         }
     }
-    else if (e.key === 'Delete' && offset === textLen && window.getSelection().isCollapsed) {
+    else if (e.key === 'Delete' && isCollapsed && atEnd) {
         e.preventDefault();
+        const currentLen = contentEl.textContent.length;
         const allContents = getVisibleContents(); const idx = allContents.indexOf(contentEl);
         if (idx < allContents.length - 1) {
             const nextContent = allContents[idx + 1]; const nextWrapper = nextContent.closest('.block-wrapper');
@@ -1523,7 +1521,7 @@ function handleBlockKeydown(e) {
                 if (nextContent.innerHTML !== '') contentEl.innerHTML += nextContent.innerHTML;
                 const nextChildren = nextWrapper.querySelector(':scope > .block-children');
                 if (nextChildren) while(nextChildren.firstChild) nextWrapper.after(nextChildren.firstChild);
-                nextWrapper.remove(); setCaretPosition(contentEl, offset);
+                nextWrapper.remove(); setCaretPosition(contentEl, currentLen);
                 saveEditorState(true); closeSlashMenu();
             } else {
                 if (nextWrapper.dataset.type === 'image') {
@@ -1537,7 +1535,7 @@ function handleBlockKeydown(e) {
         }
     }
     else if (e.key === 'ArrowUp') {
-        if (offset === 0 || contentEl.textContent === '') {
+        if (atStart) {
             const allContents = getVisibleContents(); 
             const idx = allContents.indexOf(contentEl);
             if (idx > 0) {
@@ -1552,7 +1550,7 @@ function handleBlockKeydown(e) {
         }
     }
     else if (e.key === 'ArrowDown') {
-        if (offset === textLen || contentEl.textContent === '') {
+        if (atEnd) {
             const allContents = getVisibleContents(); 
             const idx = allContents.indexOf(contentEl);
             if (idx < allContents.length - 1) {
@@ -1568,13 +1566,12 @@ function handleBlockKeydown(e) {
 function handleBlockPaste(e) {
     const clipboardData = e.clipboardData || window.clipboardData;
     
-    // ★追加: 構造化データのペーストを優先
     const motionData = clipboardData.getData('application/x-motion-blocks');
     if (motionData) {
         e.preventDefault();
         try {
             const blocksData = JSON.parse(motionData);
-            const newBlocks = regenerateBlockIds(blocksData); // IDを再生成
+            const newBlocks = regenerateBlockIds(blocksData);
             
             const targetWrapper = e.target.closest('.block-wrapper');
             if (targetWrapper) {
@@ -1586,7 +1583,6 @@ function handleBlockPaste(e) {
                     fragment.appendChild(tempContainer.firstChild);
                 }
                 
-                // もし空の段落にペーストした場合は置き換え、それ以外は下に追加
                 const contentEl = targetWrapper.querySelector('.block-content');
                 if (targetWrapper.dataset.type === 'p' && contentEl && contentEl.textContent.trim() === '') {
                     targetWrapper.replaceWith(fragment);
@@ -1603,7 +1599,6 @@ function handleBlockPaste(e) {
         }
     }
 
-    // === 以下、既存の通常のテキスト・画像ペースト処理 ===
     const items = clipboardData.items;
     for (let i = 0; i < items.length; i++) {
         if (items[i].type.indexOf('image') !== -1) {
@@ -1629,6 +1624,7 @@ function handleBlockPaste(e) {
     }
     saveEditorState(true);
 }
+
 document.addEventListener('click', (e) => {
     const a = e.target.closest('a');
     if (a && a.href) window.open(a.href, '_blank', 'noopener,noreferrer');
@@ -1775,11 +1771,8 @@ function executeBlockMenu(action) {
         blockMenuTarget.remove();
         saveEditorState(true);
     } else if (action === 'copy') {
-        // テキストコピー（構造化コピペはステップ2で実装します）
         const textToCopy = contentEl ? contentEl.innerText : '';
-        navigator.clipboard.writeText(textToCopy).then(() => {
-            // 特にアラートは出さず、コピー成功とする
-        });
+        navigator.clipboard.writeText(textToCopy);
     } else if (action === 'duplicate') {
         const cloned = blockMenuTarget.cloneNode(true);
         cloned.dataset.id = generateId();
@@ -1787,7 +1780,6 @@ function executeBlockMenu(action) {
         saveEditorState(true);
         reinitSortables();
     } else {
-        // 変換処理 (p, h1, h2, todo, toggle)
         const temp = document.createElement('div');
         const extracted = { id: blockMenuTarget.dataset.id, type: action, content: contentEl ? contentEl.innerHTML : '', children: [] };
         
@@ -1795,7 +1787,6 @@ function executeBlockMenu(action) {
             extracted.toggleOpen = true; 
             extracted.children = [{id: generateId(), type: 'p', content: '', children: []}];
         }
-        // 子供を引き継ぐ
         const currentChildren = extractBlocks(blockMenuTarget.querySelector(':scope > .block-children'));
         if (currentChildren.length > 0) extracted.children = currentChildren;
 
@@ -1814,9 +1805,7 @@ function executeBlockMenu(action) {
     blockMenuTarget = null;
 }
 
-// 他の領域をクリックしたらブロックメニューを閉じる
 document.addEventListener('click', (e) => {
-    // 【追加】ドラッグハンドル（[::]）から発生した遅延clickイベントは無視する
     if (e.target.closest('.drag-handle')) return;
 
     if (blockMenuEl && !blockMenuEl.classList.contains('hidden')) {
@@ -1875,7 +1864,6 @@ document.getElementById('image-upload-input').addEventListener('change', async f
 });
 
 async function uploadAndInsertImage(file, targetBlock) {
-    // 【要件3】添付ファイルの上限チェック (500MB)
     if (currentMediaBytes + file.size > MAX_MEDIA_BYTES) {
         alert("添付ファイルの上限 (500MB) を超過します。不要な画像を削除してください。");
         return;
@@ -1917,7 +1905,7 @@ async function uploadAndInsertImage(file, targetBlock) {
         targetBlock.replaceWith(temp.firstElementChild);
         saveEditorState(true); 
         reinitSortables();
-        calcStorageUsage(); // 容量計算を更新
+        calcStorageUsage();
     } catch (err) {
         alert("画像のアップロードに失敗しました: " + err.message);
         console.error(err);
@@ -1992,10 +1980,9 @@ function openSearchModal() {
         const includeLocked = localStorage.getItem('motion_search_locked') === 'true';
         
         Object.values(state.pages).forEach(p => {
-            // ロックされたページを除外する判定
             if (!includeLocked && isPageLocked(p.id)) return;
             
-            let match = false; let snippet = ''; // ←宣言はここ1回だけでOKです
+            let match = false; let snippet = '';
             
             if ((p.title||'無題').toLowerCase().includes(q)) match = true;
             else {
@@ -2127,17 +2114,12 @@ document.getElementById('search-input')?.addEventListener('keydown', (e) => {
     }
 });
 
-// ================= 新規アカウント承認・管理関連 =================
-
-
-// ★ 1. 管理者へアカウント開設リクエストのメールを送る処理 (EmailJS実装)
+// ================= 管理者・認証関連 =================
 async function sendAdminRequestEmail(userEmail) {
     try {
-        // EmailJS の SDK が読み込まれている前提のコードです
-        // ※あらかじめ EmailJS のサービスID、テンプレートID、公開鍵を設定してください
-        const serviceID = 'service_iwdudmi';     // ご自身のEmailJSサービスIDに変更
-        const templateID = 'template_oba4fva';   // ご自身のEmailJSテンプレートIDに変更
-        const publicKey = 'Rr8sXv8O4BghLKFMX';     // ご自身のEmailJS公開鍵（Public Key）に変更
+        const serviceID = 'service_iwdudmi';
+        const templateID = 'template_oba4fva';
+        const publicKey = 'Rr8sXv8O4BghLKFMX';
 
         const templateParams = {
             admin_email: 'thonglo02cocoa@gmail.com',
@@ -2145,17 +2127,12 @@ async function sendAdminRequestEmail(userEmail) {
             message: `新規ユーザー (${userEmail}) からアカウント開設のリクエストがありました。管理画面から承認を行ってください。`
         };
 
-        // EmailJSを使ってメール送信
         await emailjs.send(serviceID, templateID, templateParams, publicKey);
-        console.log('管理者へのメール通知が送信されました。');
     } catch (err) {
         console.error('管理者へのメール送信に失敗しました:', err);
-        // メールの送信に失敗しても、アカウント登録自体はロールバックさせない or 必要に応じてアラートを出す
     }
 }
 
-// ★ 2. サイト上の管理者ページ等に組み込む「承認処理」の関数
-// この関数を管理者用のUI（ボタン等）から呼び出すことでアカウントを承認します。
 async function approveAccount(targetUserId) {
     try {
         await databases.updateDocument(DB_ID, 'users', targetUserId, { status: 'approved' });
@@ -2165,9 +2142,6 @@ async function approveAccount(targetUserId) {
     }
 }
 
-// ================= 管理者専用機能 =================
-
-// 1. ログイン時に承認待ちユーザーを確認し、ポップアップで知らせる関数（案3）
 async function checkPendingUsersForAdmin() {
     try {
         const response = await databases.listDocuments(DB_ID, 'users', [
@@ -2178,10 +2152,8 @@ async function checkPendingUsersForAdmin() {
             const count = response.documents.length;
             const emails = response.documents.map(doc => doc.email).join(', ');
             
-            // ポップアップ通知
             setTimeout(() => {
                 if (confirm(`【管理者通知】\n現在、${count}件の新規アカウント承認待ちがあります。\n対象: ${emails}\n\n今すぐ設定画面から承認しますか？`)) {
-                    // 設定画面を開いて管理者タブをアクティブにする
                     document.getElementById('settings-overlay').classList.remove('hidden');
                     document.querySelector('.settings-tab[data-tab="admin"]')?.click();
                 }
@@ -2192,7 +2164,6 @@ async function checkPendingUsersForAdmin() {
     }
 }
 
-// 2. 設定タブが開かれたときに承認待ちリストを描画する処理
 document.querySelector('.settings-tab[data-tab="admin"]')?.addEventListener('click', async () => {
     const listContainer = document.getElementById('admin-pending-users-list');
     if (!listContainer) return;
@@ -2222,7 +2193,6 @@ document.querySelector('.settings-tab[data-tab="admin"]')?.addEventListener('cli
                 <button class="primary-btn" style="padding:4px 12px; font-size:12px; width:auto;" data-id="${doc.$id}">承認する</button>
             `;
 
-            // 承認ボタンのクリックイベント
             item.querySelector('button').onclick = async () => {
                 const btn = item.querySelector('button');
                 btn.disabled = true;
@@ -2233,7 +2203,6 @@ document.querySelector('.settings-tab[data-tab="admin"]')?.addEventListener('cli
                         status: 'approved'
                     });
                     alert(`${doc.email} のアカウントを承認しました！`);
-                    // リストを再読み込み
                     document.querySelector('.settings-tab[data-tab="admin"]').click();
                 } catch (e) {
                     alert('承認エラー: ' + e.message);
@@ -2249,7 +2218,6 @@ document.querySelector('.settings-tab[data-tab="admin"]')?.addEventListener('cli
     }
 });
 
-// ================= パスワード表示トグルの共通設定 =================
 document.addEventListener('click', (e) => {
     const btn = e.target.closest('.toggle-password-btn');
     if (!btn) return;
@@ -2259,20 +2227,17 @@ document.addEventListener('click', (e) => {
     const iconUseEl = btn.querySelector('use');
     if (!inputEl) return;
 
-    // パスワードロック画面（CSSハック使用時）の場合
     if (inputEl.style.webkitTextSecurity !== undefined && inputEl.style.webkitTextSecurity !== '') {
         if (inputEl.style.webkitTextSecurity === 'disc') {
-            inputEl.style.webkitTextSecurity = 'none'; // 文字を表示
+            inputEl.style.webkitTextSecurity = 'none';
             iconUseEl.setAttribute('href', '#icon-eye-off');
             btn.title = 'パスワードを隠す';
         } else {
-            inputEl.style.webkitTextSecurity = 'disc'; // 黒丸に戻す
+            inputEl.style.webkitTextSecurity = 'disc';
             iconUseEl.setAttribute('href', '#icon-eye');
             btn.title = 'パスワードを表示';
         }
-    } 
-    // 通常のパスワード入力欄（ログイン画面など）の場合
-    else {
+    } else {
         if (inputEl.type === 'password') {
             inputEl.type = 'text';
             iconUseEl.setAttribute('href', '#icon-eye-off');
@@ -2301,7 +2266,7 @@ document.addEventListener('mousedown', (e) => {
 
 document.addEventListener('mousemove', (e) => {
     if (!isBlockSelecting || blockSelectionStartIdx === -1) return;
-    if ((e.buttons & 1) === 0) { // 左クリックが離れたら終了
+    if ((e.buttons & 1) === 0) {
         isBlockSelecting = false;
         return;
     }
@@ -2311,7 +2276,6 @@ document.addEventListener('mousemove', (e) => {
         const blocks = getFlatBlockElements();
         const currentIdx = blocks.indexOf(block);
         
-        // 別のブロックに跨った瞬間にネイティブ選択を解除し、独自選択に切り替え
         if (currentIdx !== -1 && currentIdx !== blockSelectionStartIdx) {
             window.getSelection().removeAllRanges();
             
@@ -2339,7 +2303,6 @@ function handleClipboard(e, isCut) {
         blocks.forEach(b => {
             if (selectedBlocks.has(b.dataset.id)) {
                 const parentWrapper = b.parentElement.closest('.block-wrapper');
-                // 親が選択されていない最上位のブロックだけを抽出（ネスト重複を防ぐ）
                 if (!parentWrapper || !selectedBlocks.has(parentWrapper.dataset.id)) {
                     extracted.push(extractSingleBlock(b));
                 }

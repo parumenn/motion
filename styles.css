@@ -1381,3 +1381,54 @@ body.dark-mode #block-menu {
 body.dark-mode .selected-block > .block-main {
     background-color: rgba(35, 131, 226, 0.25) !important;
 }
+/* ================= エディタ下部の余白 ================= */
+#editor-bottom-padding {
+    height: 50vh !important; /* 画面の半分の高さを確保（スクロール可能に） */
+    cursor: text;
+}
+
+/* ================= テーブル (表) ================= */
+.motion-table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 4px 0;
+    table-layout: fixed;
+}
+.motion-table td {
+    border: 1px solid var(--border);
+    padding: 8px;
+    min-width: 50px;
+    vertical-align: top;
+    outline: none;
+    transition: background-color 0.2s;
+}
+.motion-table td:focus {
+    background-color: var(--bg-hover); /* フォーカス中のセルをうっすらハイライト */
+}
+/* テーブル操作ボタン群 */
+.table-controls {
+    display: flex;
+    gap: 8px;
+    margin-top: 4px;
+    opacity: 0;
+    transition: opacity 0.2s;
+    user-select: none;
+}
+/* ブロックにホバーした時だけ操作ボタンを表示 */
+.block-wrapper:hover .table-controls,
+.table-controls:focus-within {
+    opacity: 1;
+}
+.table-controls button {
+    background: var(--bg-sidebar);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 4px 10px;
+    font-size: 11px;
+    cursor: pointer;
+    color: var(--text-muted);
+}
+.table-controls button:hover {
+    background: var(--border);
+    color: var(--text-main);
+}

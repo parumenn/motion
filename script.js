@@ -1006,7 +1006,7 @@ function openPage(id) {
         document.getElementById('home-wrapper').classList.remove('hidden');
         document.getElementById('mobile-topbar-title').textContent = 'Motion';
         renderTree(); renderHome(); updateBreadcrumb('home');
-        if (window.innerWidth <= 768) { sidebar.classList.remove('open'); sidebarOverlay.classList.remove('active'); }
+        if (window.innerWidth <= 1024) { sidebar.classList.remove('open'); sidebarOverlay.classList.remove('active'); }
         return;
     }
 
@@ -1030,7 +1030,7 @@ function openPage(id) {
     
     if(!historyStack[id]) pushHistory(id);
     renderEditor(page);
-    if (window.innerWidth <= 768) { sidebar.classList.remove('open'); sidebarOverlay.classList.remove('active'); }
+    if (window.innerWidth <= 1024) { sidebar.classList.remove('open'); sidebarOverlay.classList.remove('active'); }
 }
 
 let titleDebounceTimer = null;

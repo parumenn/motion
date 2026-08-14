@@ -2628,22 +2628,31 @@ function mobileToolbarCmd(action, type) {
 
 // ================= iOS最適化: Visual Viewport API による追従 =================
 if (window.visualViewport) {
-    const updateToolbarPos = () => {
-        const tb = document.getElementById('mobile-toolbar');
-        if (!tb || window.innerWidth > 1024) return;
+    const updateViewportPos = () => {
         const vv = window.visualViewport;
+        if (!vv || window.innerWidth > 1024) return;
         
-        // iOSでは viewport の offsetTop と height を足した位置が「キーボード上端」の座標
-        // そこからツールバーの高さ(50px)を引いた位置に top で絶対配置する
-        const topPos = vv.offsetTop + vv.height - 50; 
-        tb.style.top = `${topPos > 0 ? topPos : 0}px`;
+        // 1. ツールバーの追従 (キーボード上端に配置)
+        const tb = document.getElementById('mobile-toolbar');
+        if (tb) {
+            const topPos = vv.offsetTop + vv.height - 50; 
+            tb.style.top = `${topPos > 0 ? topPos : 0}px`;
+        }
+
+        // 2. ボトムシートの追従 (キーボードを除いた表示領域にピッタリ合わせる)
+        const sheetOverlay = document.getElementById('mobile-bottom-sheet-overlay');
+        if (sheetOverlay) {
+            // Visual Viewportの offsetTop(画面上部からのズレ) と height(見えている高さ) を適用
+            sheetOverlay.style.top = `${vv.offsetTop}px`;
+            sheetOverlay.style.height = `${vv.height}px`;
+        }
     };
 
-    window.visualViewport.addEventListener('resize', updateToolbarPos);
-    window.visualViewport.addEventListener('scroll', updateToolbarPos);
+    window.visualViewport.addEventListener('resize', updateViewportPos);
+    window.visualViewport.addEventListener('scroll', updateViewportPos);
     
     // 初期配置用
-    setTimeout(updateToolbarPos, 100);
+    setTimeout(updateViewportPos, 100);
 }
 
 // ================= ボトムシートメニュー (モバイル専用コマンドメニュー) =================

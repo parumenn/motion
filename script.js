@@ -2556,22 +2556,28 @@ function handleSwipe() {
     }
 }
 
-// ================= モバイルツールバー制御 =================
+let lastActiveContentEl = null;
+document.addEventListener('focusin', (e) => {
+    if (e.target && e.target.classList && e.target.classList.contains('block-content')) {
+        lastActiveContentEl = e.target;
+    }
+});
+
 function mobileToolbarCmd(action, type) {
-    const activeEl = document.activeElement;
-    const wrapper = activeEl.closest('.block-wrapper');
+    if (!lastActiveContentEl) return;
+    const wrapper = lastActiveContentEl.closest('.block-wrapper');
+    if (!wrapper) return;
 
     if (action === 'image') {
         pendingImageTargetBlock = wrapper;
         document.getElementById('image-upload-input').click();
     } else if (['bold', 'italic'].includes(action)) {
+        lastActiveContentEl.focus(); // テキスト装飾のためにフォーカスを戻す
         document.execCommand(action, false, null);
+        saveEditorState();
     } else {
-        // H1やTodoなどのブロック変換処理
-        if (!wrapper) return;
-        
         const temp = document.createElement('div');
-        const content = wrapper.querySelector('.block-content')?.innerHTML || '';
+        const content = lastActiveContentEl.innerHTML || '';
         const extracted = { id: wrapper.dataset.id, type: type, content: content, children: [] };
         
         if (type === 'toggle') { 
@@ -2586,6 +2592,33 @@ function mobileToolbarCmd(action, type) {
         saveEditorState(true);
         reinitSortables();
     }
+}
+
+// ＋ボタンでコマンド一覧（スラッシュメニュー）を開く
+function openMobileCommands() {
+    if (!lastActiveContentEl) return;
+    const wrapper = lastActiveContentEl.closest('.block-wrapper');
+    if (!wrapper) return;
+    
+    slashTargetBlock = wrapper;
+    slashQuery = null; // 全てのコマンドを表示
+    lastActiveContentEl.focus();
+    showSlashMenu(lastActiveContentEl);
+}
+
+// ★ キーボードの裏に隠れる問題の解決 (Visual Viewport API)
+if (window.visualViewport) {
+    const updateToolbarPos = () => {
+        const tb = document.getElementById('mobile-toolbar');
+        if (!tb) return;
+        // 画面全体の高さから、キーボードを除いた表示領域の高さを引く
+        const offset = window.innerHeight - window.visualViewport.height;
+        // キーボードの高さ分だけツールバーを上にずらす
+        tb.style.bottom = `${offset > 0 ? offset : 0}px`;
+    };
+    // キーボードの出現・収納やスクロールに連動
+    window.visualViewport.addEventListener('resize', updateToolbarPos);
+    window.visualViewport.addEventListener('scroll', updateToolbarPos);
 }
 
 // 画面幅に応じてツールバーの表示/非表示を切り替え

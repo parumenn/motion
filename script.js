@@ -601,7 +601,7 @@ async function createPageInAppwrite(page) {
         title: page.title || '',
         parentId: page.parentId || null,
         blocks: JSON.stringify(page.blocks),
-        isLocked: page.isLocked || false
+        isLocked: page.isLocked || false,
         password: page.password || null
     };
 
@@ -634,7 +634,7 @@ async function saveDataToAppwrite(pageTarget) {
         title: page.title || '',
         parentId: page.parentId || null,
         blocks: JSON.stringify(page.blocks),
-        isLocked: page.isLocked || false
+        isLocked: page.isLocked || false,
         password: page.password || null
     };
 

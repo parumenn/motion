@@ -1332,6 +1332,38 @@ body.dark-mode #block-menu {
     #editor-bottom-padding {
         height: 60vh !important;
     }
+
+    #mobile-toolbar {
+        display: flex; /* スマホ画面でのみ表示を有効化 */
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        height: 50px;
+        background: var(--bg-main);
+        border-top: 1px solid var(--border);
+        justify-content: space-around;
+        align-items: center;
+        z-index: 10002;
+        padding: 0 10px;
+        /* キーボード出現時の移動アニメーションを滑らかにする */
+        transition: bottom 0.1s ease-out; 
+    }
+
+    #mobile-toolbar button {
+        background: var(--bg-hover);
+        border: none;
+        padding: 8px 16px;
+        border-radius: 6px;
+        color: var(--text-main);
+        font-weight: 600;
+        font-size: 14px;
+        cursor: pointer;
+    }
+
+    #editor-bottom-padding {
+        height: 60vh !important;
+    }
 }
 
 /* ================= 認証フォーム ================= */
@@ -1497,4 +1529,8 @@ body.dark-mode .selected-block > .block-main {
 .table-controls button:hover {
     background: var(--border);
     color: var(--text-main);
+}
+
+#mobile-toolbar {
+    display: none;
 }

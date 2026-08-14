@@ -2556,6 +2556,7 @@ function handleSwipe() {
     }
 }
 
+// ================= モバイルツールバー制御 =================
 let lastActiveContentEl = null;
 document.addEventListener('focusin', (e) => {
     if (e.target && e.target.classList && e.target.classList.contains('block-content')) {
@@ -2572,7 +2573,7 @@ function mobileToolbarCmd(action, type) {
         pendingImageTargetBlock = wrapper;
         document.getElementById('image-upload-input').click();
     } else if (['bold', 'italic'].includes(action)) {
-        lastActiveContentEl.focus(); // テキスト装飾のためにフォーカスを戻す
+        lastActiveContentEl.focus();
         document.execCommand(action, false, null);
         saveEditorState();
     } else {
@@ -2594,29 +2595,27 @@ function mobileToolbarCmd(action, type) {
     }
 }
 
-// ＋ボタンでコマンド一覧（スラッシュメニュー）を開く
 function openMobileCommands() {
     if (!lastActiveContentEl) return;
     const wrapper = lastActiveContentEl.closest('.block-wrapper');
     if (!wrapper) return;
     
     slashTargetBlock = wrapper;
-    slashQuery = null; // 全てのコマンドを表示
+    slashQuery = null;
     lastActiveContentEl.focus();
     showSlashMenu(lastActiveContentEl);
 }
 
-// ★ キーボードの裏に隠れる問題の解決 (Visual Viewport API)
+// iOS / Android のキーボード追従処理
 if (window.visualViewport) {
     const updateToolbarPos = () => {
         const tb = document.getElementById('mobile-toolbar');
         if (!tb) return;
-        // 画面全体の高さから、キーボードを除いた表示領域の高さを引く
-        const offset = window.innerHeight - window.visualViewport.height;
-        // キーボードの高さ分だけツールバーを上にずらす
-        tb.style.bottom = `${offset > 0 ? offset : 0}px`;
+        const viewport = window.visualViewport;
+        // キーボードが表示されている高さを計算してボトム位置を調整
+        const keyboardHeight = window.innerHeight - viewport.height - viewport.offsetTop;
+        tb.style.bottom = `${keyboardHeight > 0 ? keyboardHeight : 0}px`;
     };
-    // キーボードの出現・収納やスクロールに連動
     window.visualViewport.addEventListener('resize', updateToolbarPos);
     window.visualViewport.addEventListener('scroll', updateToolbarPos);
 }

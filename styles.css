@@ -1171,6 +1171,10 @@ body.dark-mode #block-menu {
 
 @media (max-width: 768px) {
 
+    input, select, textarea {
+        font-size: 16px !important;
+    }
+
     #sidebar {
         display: flex;
         position: fixed;
@@ -1209,6 +1213,26 @@ body.dark-mode #block-menu {
 
     .mobile-topbar {
         display: flex;
+    }
+
+    .mobile-topbar {
+        display: flex;
+        position: sticky;
+        top: 0;
+        z-index: 2000; /* 重なり順を調整 */
+        background: var(--bg-main);
+        padding: 12px 16px;
+        align-items: center;
+        border-bottom: 1px solid var(--border);
+    }
+
+    #sidebar-toggle-btn {
+        padding: 16px; /* タップできる領域を大きく広げる */
+        margin-left: -16px; /* 見た目の位置がズレないようにマイナスマージンで相殺 */
+        background: transparent;
+        border: none;
+        color: var(--text-main);
+        cursor: pointer;
     }
 
     .settings-modal {

@@ -2556,12 +2556,33 @@ function handleSwipe() {
     }
 }
 
-// ================= モバイルツールバー制御 =================
+// ================= モバイルツールバー制御 (UI/UX最適化版) =================
+
 let lastActiveContentEl = null;
+
+// エディタ内のフォーカスを常に監視し、最後に触ったブロックを記憶
 document.addEventListener('focusin', (e) => {
     if (e.target && e.target.classList && e.target.classList.contains('block-content')) {
         lastActiveContentEl = e.target;
     }
+});
+
+// ツールバーのボタン押下時にフォーカスが外れるのを防ぐ処理
+document.querySelectorAll('.m-tool-btn').forEach(btn => {
+    const handleToolbarTap = (e) => {
+        // ★最重要: preventDefaultによりフォーカス喪失を防ぎ、キーボードを閉じさせない
+        e.preventDefault(); 
+        
+        const action = btn.dataset.action;
+        if (action === 'menu') {
+            openMobileBottomSheet();
+        } else {
+            mobileToolbarCmd(action, action);
+        }
+    };
+    // PC・スマホ両方のタッチ/クリックイベントで発火
+    btn.addEventListener('mousedown', handleToolbarTap);
+    btn.addEventListener('touchstart', handleToolbarTap, { passive: false });
 });
 
 function mobileToolbarCmd(action, type) {
@@ -2573,10 +2594,11 @@ function mobileToolbarCmd(action, type) {
         pendingImageTargetBlock = wrapper;
         document.getElementById('image-upload-input').click();
     } else if (['bold', 'italic'].includes(action)) {
-        lastActiveContentEl.focus();
+        // テキスト装飾
         document.execCommand(action, false, null);
         saveEditorState();
     } else {
+        // ブロック変換処理
         const temp = document.createElement('div');
         const content = lastActiveContentEl.innerHTML || '';
         const extracted = { id: wrapper.dataset.id, type: type, content: content, children: [] };
@@ -2589,42 +2611,160 @@ function mobileToolbarCmd(action, type) {
         renderBlocks([extracted], temp);
         const newEl = temp.firstElementChild;
         wrapper.replaceWith(newEl);
-        newEl.querySelector('.block-content').focus();
+        
+        // 変換後、新しいブロックに確実にフォーカスを戻してキーボードを維持する
+        const newContent = newEl.querySelector('.block-content');
+        if (newContent) {
+            newContent.focus();
+            if (newContent.contentEditable === "true") {
+                setCaretPosition(newContent, newContent.textContent.length);
+            }
+        }
+        
         saveEditorState(true);
         reinitSortables();
     }
 }
 
-function openMobileCommands() {
-    if (!lastActiveContentEl) return;
+// ================= iOS最適化: Visual Viewport API による追従 =================
+if (window.visualViewport) {
+    const updateToolbarPos = () => {
+        const tb = document.getElementById('mobile-toolbar');
+        if (!tb || window.innerWidth > 1024) return;
+        const vv = window.visualViewport;
+        
+        // iOSでは viewport の offsetTop と height を足した位置が「キーボード上端」の座標
+        // そこからツールバーの高さ(50px)を引いた位置に top で絶対配置する
+        const topPos = vv.offsetTop + vv.height - 50; 
+        tb.style.top = `${topPos > 0 ? topPos : 0}px`;
+    };
+
+    window.visualViewport.addEventListener('resize', updateToolbarPos);
+    window.visualViewport.addEventListener('scroll', updateToolbarPos);
+    
+    // 初期配置用
+    setTimeout(updateToolbarPos, 100);
+}
+
+// ================= ボトムシートメニュー (モバイル専用コマンドメニュー) =================
+const sheetOverlay = document.getElementById('mobile-bottom-sheet-overlay');
+const sheetContent = document.getElementById('mobile-sheet-content');
+
+function openMobileBottomSheet() {
+    if (!lastActiveContentEl || !sheetOverlay || !sheetContent) return;
     const wrapper = lastActiveContentEl.closest('.block-wrapper');
     if (!wrapper) return;
     
     slashTargetBlock = wrapper;
-    slashQuery = null;
-    lastActiveContentEl.focus();
-    showSlashMenu(lastActiveContentEl);
+    
+    // コマンド一覧を生成
+    sheetContent.innerHTML = '';
+    COMMANDS.forEach(cmd => {
+        const item = document.createElement('div');
+        item.className = 'sheet-item';
+        item.innerHTML = `<div class="sheet-item-title">${cmd.label}</div><div class="sheet-item-desc">${cmd.desc}</div>`;
+        
+        const handleItemTap = (e) => {
+            e.preventDefault(); // フォーカス外れ防止
+            closeMobileBottomSheet();
+            executeMobileCommand(cmd.id);
+        };
+        
+        item.addEventListener('mousedown', handleItemTap);
+        item.addEventListener('touchstart', handleItemTap, { passive: false });
+        sheetContent.appendChild(item);
+    });
+    
+    sheetOverlay.classList.remove('hidden');
 }
 
-// iOS / Android のキーボード追従処理
-if (window.visualViewport) {
-    const updateToolbarPos = () => {
-        const tb = document.getElementById('mobile-toolbar');
-        if (!tb) return;
-        const viewport = window.visualViewport;
-        // キーボードが表示されている高さを計算してボトム位置を調整
-        const keyboardHeight = window.innerHeight - viewport.height - viewport.offsetTop;
-        tb.style.bottom = `${keyboardHeight > 0 ? keyboardHeight : 0}px`;
-    };
-    window.visualViewport.addEventListener('resize', updateToolbarPos);
-    window.visualViewport.addEventListener('scroll', updateToolbarPos);
+function closeMobileBottomSheet() {
+    if (sheetOverlay) sheetOverlay.classList.add('hidden');
 }
 
-// 画面幅に応じてツールバーの表示/非表示を切り替え
-window.addEventListener('resize', () => {
-    const tb = document.getElementById('mobile-toolbar');
-    if (window.innerWidth <= 1024) tb.classList.remove('hidden');
-    else tb.classList.add('hidden');
-});
-// 初期表示判定
-window.dispatchEvent(new Event('resize'));s
+// 余白（暗転している背景）のタップで確実にキャンセルして閉じる
+if (sheetOverlay) {
+    sheetOverlay.addEventListener('mousedown', (e) => {
+        if (e.target === sheetOverlay) {
+            e.preventDefault();
+            closeMobileBottomSheet();
+        }
+    });
+    sheetOverlay.addEventListener('touchstart', (e) => {
+        if (e.target === sheetOverlay) {
+            e.preventDefault();
+            closeMobileBottomSheet();
+        }
+    }, { passive: false });
+}
+
+const closeSheetBtn = document.getElementById('close-sheet-btn');
+if (closeSheetBtn) {
+    closeSheetBtn.addEventListener('click', closeMobileBottomSheet);
+}
+
+// モバイル専用のコマンド実行関数（PC版の `/` 削除ロジックに影響されないように分離）
+function executeMobileCommand(cmdId) {
+    if (!slashTargetBlock) return;
+    const targetBlock = slashTargetBlock;
+    const contentEl = targetBlock.querySelector('.block-content');
+    
+    contentEl.focus(); 
+    setCaretPosition(contentEl, contentEl.textContent.length);
+    
+    // 範囲選択状態を保存
+    const sel = window.getSelection();
+    if (sel.rangeCount > 0) {
+        savedCaretRange = sel.getRangeAt(0).cloneRange();
+    }
+
+    if (cmdId === 'image') {
+        pendingImageTargetBlock = targetBlock;
+        document.getElementById('image-upload-input').click();
+    } else if (cmdId === 'link') {
+        pendingExtLinkBlock = targetBlock; 
+        document.getElementById('ext-link-title').value = ''; document.getElementById('ext-link-url').value = '';
+        document.getElementById('ext-link-overlay').classList.remove('hidden');
+        setTimeout(() => document.getElementById('ext-link-url').focus(), 10);
+    } else if (cmdId === 'linkpage') {
+        const linkSelect = document.getElementById('link-select');
+        linkSelect.innerHTML = '';
+        Object.values(state.pages).forEach(p => {
+            if(p.id !== state.currentPageId) { 
+                const opt = document.createElement('option');
+                opt.value = p.id; opt.textContent = p.title || '無題'; linkSelect.appendChild(opt);
+            }
+        });
+        document.getElementById('link-overlay').classList.remove('hidden');
+        pendingExtLinkBlock = targetBlock;
+    } else if (cmdId === 'page') {
+        const childId = generateId();
+        const childPage = { 
+            id: childId, 
+            title: '', 
+            parentId: state.currentPageId, 
+            blocks: [{ id: generateId(), type: 'p', content: '', children:[] }], 
+            isLocked: false 
+        };
+        state.pages[childId] = childPage;
+
+        (async () => {
+            await createPageInAppwrite(childPage);
+            const temp = document.createElement('div'); 
+            renderBlocks([{id: targetBlock.dataset.id, type: 'page_link', content: childId, children:[]}], temp);
+            targetBlock.replaceWith(temp.firstElementChild);
+            saveEditorState(true); 
+            renderTree(); 
+            openPage(childId); 
+            setTimeout(() => pageTitleEl.focus(), 10);
+        })();
+    } else {
+        const temp = document.createElement('div'); 
+        const extracted = { id: targetBlock.dataset.id, type: cmdId, content: contentEl.innerHTML, children:[] };
+        if (cmdId === 'toggle') { extracted.toggleOpen = true; extracted.children = [{id: generateId(), type: 'p', content: '', children: []}]; }
+        renderBlocks([extracted], temp);
+        const newEl = temp.firstElementChild;
+        targetBlock.replaceWith(newEl); newEl.querySelector(':scope > .block-main > .block-content').focus();
+        saveEditorState(true); reinitSortables();
+    }
+}

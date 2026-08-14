@@ -290,7 +290,7 @@
 
     <script src="script.js"></script>
 
-<!-- ▼▼ モバイルツールバー（置換） ▼▼ -->
+<!-- ▼▼ モバイルツールバー ▼▼ -->
     <div id="mobile-toolbar" class="mobile-toolbar">
         <button class="m-tool-btn" data-action="menu">＋</button>
         <button class="m-tool-btn" data-action="h1">H1</button>
@@ -299,7 +299,7 @@
         <button class="m-tool-btn" data-action="bold">B</button>
     </div>
 
-    <!-- ▼▼ モバイル用ボトムシートメニュー（新規追加） ▼▼ -->
+    <!-- ▼▼ モバイル用ボトムシートメニュー ▼▼ -->
     <div id="mobile-bottom-sheet-overlay" class="hidden">
         <div id="mobile-bottom-sheet">
             <div class="sheet-header">
@@ -311,5 +311,8 @@
             </div>
         </div>
     </div>
+    
+    <!-- ★必ずすべてのHTML（UI）を記述した「後」に読み込む -->
+    <script src="script.js"></script>
 </body>
 </html>

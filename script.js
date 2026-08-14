@@ -569,6 +569,7 @@ async function loadDataFromAppwrite() {
                 parentId: doc.parentId || null,
                 blocks: parsedBlocks,
                 isLocked: doc.isLocked || false,
+                password: doc.password || null, // ★追加
                 $id: doc.$id
             };
             if (!doc.parentId) state.rootPages.push(doc.pageId);
@@ -601,6 +602,7 @@ async function createPageInAppwrite(page) {
         parentId: page.parentId || null,
         blocks: JSON.stringify(page.blocks),
         isLocked: page.isLocked || false
+        password: page.password || null
     };
 
     const permissions = [
@@ -633,6 +635,7 @@ async function saveDataToAppwrite(pageTarget) {
         parentId: page.parentId || null,
         blocks: JSON.stringify(page.blocks),
         isLocked: page.isLocked || false
+        password: page.password || null
     };
 
     try {
@@ -1080,12 +1083,22 @@ function showPasswordModal(lockParentId, onSuccess) {
     document.getElementById('modal-submit').onclick = () => {
         const pass = modalPass.value; 
         const parentPage = state.pages[lockParentId];
-        parentPage.password = pass; 
-        parentPage.isUnlockedSession = true;
         
-        modalPass.value = '';
-        overlay.classList.add('hidden'); 
-        if(onSuccess) onSuccess();
+        // ★追加：入力されたパスワードを暗号化
+        const inputHash = CryptoJS.SHA256(pass).toString();
+
+        // ★追加：保存されている暗号化パスワードと一致するか検証
+        if (inputHash === parentPage.password) {
+            parentPage.isUnlockedSession = true;
+            modalPass.value = '';
+            overlay.classList.add('hidden'); 
+            if(onSuccess) onSuccess();
+        } else {
+            // 一致しない場合はエラーを出して再入力を促す
+            alert("パスワードが間違っています。");
+            modalPass.value = '';
+            modalPass.focus();
+        }
     };
 }
 
@@ -1100,7 +1113,9 @@ document.getElementById('lock-btn')?.addEventListener('click', () => {
     } else {
         const pass = prompt("このページをロックするためのパスワードを入力してください:");
         if (pass) {
-            page.isLocked = true; page.password = pass; page.isUnlockedSession = false;
+            page.isLocked = true;
+            page.password = CryptoJS.SHA256(pass).toString();
+            page.isUnlockedSession = false;
             saveEditorState(true); 
             const currentId = state.currentPageId; state.currentPageId = null;
             document.getElementById('editor-wrapper').classList.add('hidden'); document.getElementById('empty-state').classList.remove('hidden');

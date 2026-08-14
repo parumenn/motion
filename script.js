@@ -2555,3 +2555,44 @@ function handleSwipe() {
         }
     }
 }
+
+// ================= モバイルツールバー制御 =================
+function mobileToolbarCmd(action, type) {
+    const activeEl = document.activeElement;
+    const wrapper = activeEl.closest('.block-wrapper');
+
+    if (action === 'image') {
+        pendingImageTargetBlock = wrapper;
+        document.getElementById('image-upload-input').click();
+    } else if (['bold', 'italic'].includes(action)) {
+        document.execCommand(action, false, null);
+    } else {
+        // H1やTodoなどのブロック変換処理
+        if (!wrapper) return;
+        
+        const temp = document.createElement('div');
+        const content = wrapper.querySelector('.block-content')?.innerHTML || '';
+        const extracted = { id: wrapper.dataset.id, type: type, content: content, children: [] };
+        
+        if (type === 'toggle') { 
+            extracted.toggleOpen = true; 
+            extracted.children = [{id: generateId(), type: 'p', content: '', children: []}]; 
+        }
+
+        renderBlocks([extracted], temp);
+        const newEl = temp.firstElementChild;
+        wrapper.replaceWith(newEl);
+        newEl.querySelector('.block-content').focus();
+        saveEditorState(true);
+        reinitSortables();
+    }
+}
+
+// 画面幅に応じてツールバーの表示/非表示を切り替え
+window.addEventListener('resize', () => {
+    const tb = document.getElementById('mobile-toolbar');
+    if (window.innerWidth <= 1024) tb.classList.remove('hidden');
+    else tb.classList.add('hidden');
+});
+// 初期表示判定
+window.dispatchEvent(new Event('resize'));s

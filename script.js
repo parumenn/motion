@@ -2518,3 +2518,40 @@ function handleClipboard(e, isCut) {
 }
 document.addEventListener('copy', (e) => handleClipboard(e, false));
 document.addEventListener('cut', (e) => handleClipboard(e, true));
+
+// ================= スワイプでのサイドバー開閉機能 =================
+let touchStartX = 0;
+let touchEndX = 0;
+
+document.addEventListener('touchstart', e => {
+    touchStartX = e.changedTouches[0].screenX;
+}, { passive: true });
+
+document.addEventListener('touchend', e => {
+    touchEndX = e.changedTouches[0].screenX;
+    handleSwipe();
+}, { passive: true });
+
+function handleSwipe() {
+    const swipeThreshold = 50; // スワイプと判定する移動距離（px）
+    const isMobile = window.innerWidth <= 768;
+    
+    // PC画面では何もしない
+    if (!isMobile) return;
+
+    // 右スワイプ（メニューを開く）
+    if (touchEndX - touchStartX > swipeThreshold) {
+        // 誤作動を防ぐため、画面の左端（50px以内）からのスワイプのみ反応させる
+        if (touchStartX < 50) {
+            sidebar.classList.add('open');
+            sidebarOverlay.classList.add('active');
+        }
+    } 
+    // 左スワイプ（メニューを閉じる）
+    else if (touchStartX - touchEndX > swipeThreshold) {
+        if (sidebar.classList.contains('open')) {
+            sidebar.classList.remove('open');
+            sidebarOverlay.classList.remove('active');
+        }
+    }
+}

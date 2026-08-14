@@ -1503,13 +1503,14 @@ body.dark-mode .selected-block > .block-main {
         height: 60vh !important;
     }
 
-    /* ▼▼ モバイル用ボトムシートのスタイル（新規追加） ▼▼ */
+/* ▼▼ モバイル用ボトムシートのスタイル（修正版） ▼▼ */
     #mobile-bottom-sheet-overlay {
         position: fixed;
+        /* topとheightはキーボード表示に合わせてJSで動的に制御します */
         top: 0;
         left: 0;
         width: 100vw;
-        height: 100dvh;
+        height: 100%;
         background: rgba(0, 0, 0, 0.4);
         z-index: 2147483647;
         display: flex;
@@ -1521,7 +1522,8 @@ body.dark-mode .selected-block > .block-main {
     #mobile-bottom-sheet {
         background: var(--bg-main);
         width: 100%;
-        max-height: 70vh;
+        /* メニューの高さが見えている画面の90%を超えないように制限 */
+        max-height: 90%; 
         border-radius: 16px 16px 0 0;
         display: flex;
         flex-direction: column;
@@ -1540,6 +1542,7 @@ body.dark-mode .selected-block > .block-main {
         justify-content: space-between;
         align-items: center;
         font-weight: bold;
+        flex-shrink: 0; /* ヘッダーが潰れるのを防ぐ */
     }
 
     .sheet-header button {
@@ -1553,6 +1556,9 @@ body.dark-mode .selected-block > .block-main {
     .sheet-content {
         overflow-y: auto;
         padding: 8px 16px;
+        flex: 1; /* 残りの高さをすべてスクロール領域として確保 */
+        -webkit-overflow-scrolling: touch; /* iOSでの滑らかなスワイプを有効化 */
+        overscroll-behavior: contain;
     }
 
     .sheet-item {

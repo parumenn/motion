@@ -2673,14 +2673,45 @@ function openMobileBottomSheet() {
         item.className = 'sheet-item';
         item.innerHTML = `<div class="sheet-item-title">${cmd.label}</div><div class="sheet-item-desc">${cmd.desc}</div>`;
         
+        let startX = 0;
+        let startY = 0;
+        let isSwiping = false;
+
+        item.addEventListener('touchstart', (e) => {
+            if (e.touches.length > 0) {
+                startX = e.touches[0].clientX;
+                startY = e.touches[0].clientY;
+                isSwiping = false;
+            }
+        }, { passive: true });
+
+        item.addEventListener('touchmove', (e) => {
+            if (e.touches.length > 0) {
+                const moveX = Math.abs(e.touches[0].clientX - startX);
+                const moveY = Math.abs(e.touches[0].clientY - startY);
+                // 上下や左右に一定以上指を動かした場合は「スクロール操作」と判定
+                if (moveX > 8 || moveY > 8) {
+                    isSwiping = true;
+                }
+            }
+        }, { passive: true });
+
         const handleItemTap = (e) => {
+            // スワイプ（スクロール）中の場合は機能を実行しない
+            if (isSwiping) return;
+
             e.preventDefault(); // フォーカス外れ防止
             closeMobileBottomSheet();
             executeMobileCommand(cmd.id);
         };
         
         item.addEventListener('mousedown', handleItemTap);
-        item.addEventListener('touchstart', handleItemTap, { passive: false });
+        item.addEventListener('touchend', (e) => {
+            if (!isSwiping) {
+                handleItemTap(e);
+            }
+        });
+
         sheetContent.appendChild(item);
     });
     

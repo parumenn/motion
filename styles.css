@@ -35,7 +35,7 @@ body {
     font-family: var(--font-family);
     color: var(--text-main);
     display: flex;
-    height: 100vh;
+    height: 100dvh;
     overflow: hidden;
     background: var(--bg-main);
     transition: background 0.2s, color 0.2s;
@@ -1169,7 +1169,7 @@ body.dark-mode #block-menu {
 
 /* ================= モバイル ================= */
 
-@media (max-width: 768px) {
+@media (max-width: 1024px) {
 
     input, select, textarea {
         font-size: 16px !important;
@@ -1217,9 +1217,11 @@ body.dark-mode #block-menu {
 
     .mobile-topbar {
         display: flex;
-        position: sticky;
+        position: absolute; /* ★ sticky から absolute に変更 */
         top: 0;
-        z-index: 2000; /* 重なり順を調整 */
+        left: 0;
+        width: 100%;        /* ★ 横幅を100%にする */
+        z-index: 2000;
         background: var(--bg-main);
         padding: 12px 16px;
         align-items: center;
@@ -1227,8 +1229,8 @@ body.dark-mode #block-menu {
     }
 
     #sidebar-toggle-btn {
-        padding: 16px; /* タップできる領域を大きく広げる */
-        margin-left: -16px; /* 見た目の位置がズレないようにマイナスマージンで相殺 */
+        padding: 16px; 
+        margin-left: -16px; 
         background: transparent;
         border: none;
         color: var(--text-main);
@@ -1276,6 +1278,10 @@ body.dark-mode #block-menu {
 
     .login-form-container {
         padding: 32px 24px;
+    }
+
+    #auth-form {
+        max-width: 100%;
     }
 }
 
@@ -1352,15 +1358,6 @@ body.dark-mode #block-menu {
     margin-top: 8px;
 }
 
-@media (max-width: 768px) {
-    .login-form-container {
-        padding: 32px 24px;
-    }
-
-    #auth-form {
-        max-width: 100%;
-    }
-}
 
 /* ================= ログイン画面のボタン視認性向上 ================= */
 #auth-form .primary-btn,

@@ -536,6 +536,7 @@ document.getElementById('btn-logout')?.addEventListener('click', async () => {
 });
 
 // ================= Appwrite データ同期 =================
+// ================= Appwrite データ同期 =================
 async function loadDataFromAppwrite() {
     try {
         state.pages = {};
@@ -545,9 +546,12 @@ async function loadDataFromAppwrite() {
         let hasMore = true;
         let lastId = null;
 
-        // ページネーションを用いて全データを取得するループ
         while (hasMore) {
-            const queries = [Query.limit(100)]; // 1回のリクエストで100件取得
+            // ★変更: blocks を除外してメタデータだけを取得する
+            const queries = [
+                Query.limit(100),
+                Query.select(["pageId", "title", "parentId", "isLocked", "password"])
+            ];
             if (lastId) {
                 queries.push(Query.cursorAfter(lastId));
             }
@@ -558,45 +562,32 @@ async function loadDataFromAppwrite() {
                 if (!pageMap[doc.pageId]) {
                     pageMap[doc.pageId] = doc;
                 } else {
-                    // 同一pageIdが複数ある場合は古い方を削除
                     try {
                         await databases.deleteDocument(DB_ID, COLLECTION_PAGES, doc.$id);
                     } catch (e) {}
                 }
             }
 
-            // 取得件数が上限未満ならすべて取得完了
             if (response.documents.length < 100) {
                 hasMore = false;
             } else {
-                // 次のリクエストのカーソルとして、最後に取得したドキュメントの$idをセット
                 lastId = response.documents[response.documents.length - 1].$id;
             }
         }
 
-        // 取得したドキュメントを state.pages に展開
         Object.values(pageMap).forEach(doc => {
-            let parsedBlocks = doc.blocks;
-            if (typeof parsedBlocks === 'string') {
-                try { parsedBlocks = JSON.parse(parsedBlocks); } catch (err) { parsedBlocks = []; }
-            }
-            if (!Array.isArray(parsedBlocks)) {
-                parsedBlocks = [{ id: generateId(), type: 'p', content: '', children: [] }];
-            }
-
             state.pages[doc.pageId] = {
                 id: doc.pageId,
                 title: doc.title || '',
                 parentId: doc.parentId || null,
-                blocks: parsedBlocks,
+                blocks: null, // ★変更: 初期状態は未読み込み（null）とする
                 isLocked: doc.isLocked || false,
-                password: doc.password || null, // ★追加
+                password: doc.password || null,
                 $id: doc.$id
             };
             if (!doc.parentId) state.rootPages.push(doc.pageId);
         });
 
-        // 初回ロード時にページが1つもなければ「はじめに」ページを作成
         if (Object.keys(state.pages).length === 0) {
             const id = generateId();
             const initialPage = { 
@@ -1020,7 +1011,7 @@ function renderHome() {
 
 document.getElementById('btn-home').addEventListener('click', () => openPage('home'));
 
-function openPage(id) {
+async function openPage(id) {
     if (id === 'home') {
         state.currentPageId = 'home';
         document.getElementById('editor-wrapper').classList.add('hidden');
@@ -1035,6 +1026,35 @@ function openPage(id) {
     const lockedBy = isPageLocked(id);
     if (lockedBy && !lockedBy.isUnlockedSession) { showPasswordModal(lockedBy.id, () => openPage(id)); return; }
     
+    const page = state.pages[id];
+
+    // ★追加: ブロックデータが未読み込みの場合はAppwriteからフェッチする
+    if (page.blocks === null) {
+        if (page.$id) {
+            try {
+                // そのページの blocks だけを取得
+                const doc = await databases.getDocument(DB_ID, COLLECTION_PAGES, page.$id, [
+                    Query.select(["blocks"])
+                ]);
+                let parsedBlocks = doc.blocks;
+                if (typeof parsedBlocks === 'string') {
+                    try { parsedBlocks = JSON.parse(parsedBlocks); } catch (err) { parsedBlocks = []; }
+                }
+                if (!Array.isArray(parsedBlocks)) {
+                    parsedBlocks = [{ id: generateId(), type: 'p', content: '', children: [] }];
+                }
+                page.blocks = parsedBlocks;
+            } catch (err) {
+                console.error("Failed to load blocks:", err);
+                page.blocks = [{ id: generateId(), type: 'p', content: '読み込みエラーが発生しました。', children: [] }];
+            }
+        } else {
+            // DB保存前の新規作成ページなどの場合
+            page.blocks = [{ id: generateId(), type: 'p', content: '', children: [] }];
+        }
+    }
+    // ----------------------------------------------------
+
     trackRecentPage(id);
     state.currentPageId = id; renderTree(); updateBreadcrumb(id);
     
@@ -1042,7 +1062,6 @@ function openPage(id) {
     document.getElementById('home-wrapper').classList.add('hidden');
     document.getElementById('editor-wrapper').classList.remove('hidden');
     
-    const page = state.pages[id];
     pageTitleEl.textContent = page.title || '';
     document.getElementById('mobile-topbar-title').textContent = page.title || '無題';
     

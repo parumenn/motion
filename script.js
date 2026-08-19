@@ -1011,11 +1011,13 @@ function renderHome() {
 
 document.getElementById('btn-home').addEventListener('click', () => openPage('home'));
 
+
 async function openPage(id) {
     if (id === 'home') {
         state.currentPageId = 'home';
         document.getElementById('editor-wrapper').classList.add('hidden');
         document.getElementById('empty-state').classList.add('hidden');
+        document.getElementById('inline-loading').classList.add('hidden'); // ★追加
         document.getElementById('home-wrapper').classList.remove('hidden');
         document.getElementById('mobile-topbar-title').textContent = 'Motion';
         renderTree(); renderHome(); updateBreadcrumb('home');
@@ -1028,11 +1030,17 @@ async function openPage(id) {
     
     const page = state.pages[id];
 
-    // ★追加: ブロックデータが未読み込みの場合はAppwriteからフェッチする
+    // ★追加: 既存の表示を隠し、ローディングを表示
+    document.getElementById('empty-state').classList.add('hidden'); 
+    document.getElementById('home-wrapper').classList.add('hidden');
+    
+    // まだ読み込まれていない場合のみローディングUIを出す
     if (page.blocks === null) {
+        document.getElementById('editor-wrapper').classList.add('hidden');
+        document.getElementById('inline-loading').classList.remove('hidden');
+        
         if (page.$id) {
             try {
-                // そのページの blocks だけを取得
                 const doc = await databases.getDocument(DB_ID, COLLECTION_PAGES, page.$id, [
                     Query.select(["blocks"])
                 ]);
@@ -1049,18 +1057,16 @@ async function openPage(id) {
                 page.blocks = [{ id: generateId(), type: 'p', content: '読み込みエラーが発生しました。', children: [] }];
             }
         } else {
-            // DB保存前の新規作成ページなどの場合
             page.blocks = [{ id: generateId(), type: 'p', content: '', children: [] }];
         }
     }
-    // ----------------------------------------------------
+
+    // ★追加: 読み込み完了後、ローディングを隠してエディタを表示
+    document.getElementById('inline-loading').classList.add('hidden');
+    document.getElementById('editor-wrapper').classList.remove('hidden');
 
     trackRecentPage(id);
     state.currentPageId = id; renderTree(); updateBreadcrumb(id);
-    
-    document.getElementById('empty-state').classList.add('hidden'); 
-    document.getElementById('home-wrapper').classList.add('hidden');
-    document.getElementById('editor-wrapper').classList.remove('hidden');
     
     pageTitleEl.textContent = page.title || '';
     document.getElementById('mobile-topbar-title').textContent = page.title || '無題';
@@ -1072,6 +1078,42 @@ async function openPage(id) {
     if(!historyStack[id]) pushHistory(id);
     renderEditor(page);
     if (window.innerWidth <= 1024) { sidebar.classList.remove('open'); sidebarOverlay.classList.remove('active'); }
+
+    // ★追加: 画面描画が終わった後、裏側（非同期）で子ページをプリフェッチする
+    prefetchChildren(id);
+}
+
+async function prefetchChildren(parentId) {
+    // 現在のページの子ページをすべて取得
+    const children = Object.values(state.pages).filter(p => p.parentId === parentId);
+    
+    // すでに読み込み済みのものを除外
+    const toFetch = children.filter(p => p.blocks === null && p.$id);
+    
+    if (toFetch.length === 0) return;
+
+    // 並行してAppwriteから取得（※あまりに多いとAPI制限に引っかかる可能性があるため注意）
+    const promises = toFetch.map(async (page) => {
+        try {
+            const doc = await databases.getDocument(DB_ID, COLLECTION_PAGES, page.$id, [
+                Query.select(["blocks"])
+            ]);
+            let parsedBlocks = doc.blocks;
+            if (typeof parsedBlocks === 'string') {
+                try { parsedBlocks = JSON.parse(parsedBlocks); } catch (err) { parsedBlocks = []; }
+            }
+            if (!Array.isArray(parsedBlocks)) {
+                parsedBlocks = [{ id: generateId(), type: 'p', content: '', children: [] }];
+            }
+            // 裏側でこっそりデータをセットしておく
+            page.blocks = parsedBlocks;
+        } catch(e) {
+            console.warn('Prefetch failed for:', page.id, e);
+        }
+    });
+
+    // 取得完了を待たない（Promise.allSettledを使ってバックグラウンドで処理させる）
+    Promise.allSettled(promises);
 }
 
 let titleDebounceTimer = null;

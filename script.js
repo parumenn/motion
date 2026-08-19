@@ -538,22 +538,43 @@ document.getElementById('btn-logout')?.addEventListener('click', async () => {
 // ================= Appwrite データ同期 =================
 async function loadDataFromAppwrite() {
     try {
-        const response = await databases.listDocuments(DB_ID, COLLECTION_PAGES);
-
         state.pages = {};
         state.rootPages = [];
-
         const pageMap = {};
-        for (const doc of response.documents) {
-            if (!pageMap[doc.pageId]) {
-                pageMap[doc.pageId] = doc;
+
+        let hasMore = true;
+        let lastId = null;
+
+        // ページネーションを用いて全データを取得するループ
+        while (hasMore) {
+            const queries = [Query.limit(100)]; // 1回のリクエストで100件取得
+            if (lastId) {
+                queries.push(Query.cursorAfter(lastId));
+            }
+
+            const response = await databases.listDocuments(DB_ID, COLLECTION_PAGES, queries);
+
+            for (const doc of response.documents) {
+                if (!pageMap[doc.pageId]) {
+                    pageMap[doc.pageId] = doc;
+                } else {
+                    // 同一pageIdが複数ある場合は古い方を削除
+                    try {
+                        await databases.deleteDocument(DB_ID, COLLECTION_PAGES, doc.$id);
+                    } catch (e) {}
+                }
+            }
+
+            // 取得件数が上限未満ならすべて取得完了
+            if (response.documents.length < 100) {
+                hasMore = false;
             } else {
-                try {
-                    await databases.deleteDocument(DB_ID, COLLECTION_PAGES, doc.$id);
-                } catch (e) {}
+                // 次のリクエストのカーソルとして、最後に取得したドキュメントの$idをセット
+                lastId = response.documents[response.documents.length - 1].$id;
             }
         }
 
+        // 取得したドキュメントを state.pages に展開
         Object.values(pageMap).forEach(doc => {
             let parsedBlocks = doc.blocks;
             if (typeof parsedBlocks === 'string') {
@@ -575,6 +596,7 @@ async function loadDataFromAppwrite() {
             if (!doc.parentId) state.rootPages.push(doc.pageId);
         });
 
+        // 初回ロード時にページが1つもなければ「はじめに」ページを作成
         if (Object.keys(state.pages).length === 0) {
             const id = generateId();
             const initialPage = { 

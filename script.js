@@ -1376,8 +1376,18 @@ function renderBlocks(blockArray, container) {
                 controls.className = 'table-controls';
                 controls.contentEditable = "false";
                 
+                const syncData = () => {
+                    Array.from(table.rows).forEach((tr, rIdx) => {
+                        Array.from(tr.cells).forEach((td, cIdx) => {
+                            data.rows[rIdx][cIdx] = td.innerHTML;
+                            if (rIdx === 0) data.widths[cIdx] = td.style.width || '';
+                        });
+                    });
+                };
+
                 const addRow = document.createElement('button'); addRow.textContent = '+ 下に行';
                 addRow.onclick = () => { 
+                    syncData();
                     const newRow = new Array(data.rows[0].length).fill('');
                     data.rows.splice(activeCell.r + 1, 0, newRow);
                     renderTable(data); saveEditorState(true); 
@@ -1385,6 +1395,7 @@ function renderBlocks(blockArray, container) {
                 
                 const addCol = document.createElement('button'); addCol.textContent = '+ 右に列';
                 addCol.onclick = () => { 
+                    syncData();
                     data.rows.forEach(r => r.splice(activeCell.c + 1, 0, '')); 
                     data.widths.splice(activeCell.c + 1, 0, '');
                     renderTable(data); saveEditorState(true); 
@@ -1392,6 +1403,7 @@ function renderBlocks(blockArray, container) {
                 
                 const delRow = document.createElement('button'); delRow.textContent = '行を削除';
                 delRow.onclick = () => { 
+                    syncData();
                     if(data.rows.length > 1) { 
                         data.rows.splice(activeCell.r, 1); 
                         activeCell.r = Math.min(activeCell.r, data.rows.length - 1);
@@ -1401,6 +1413,7 @@ function renderBlocks(blockArray, container) {
                 
                 const delCol = document.createElement('button'); delCol.textContent = '列を削除';
                 delCol.onclick = () => { 
+                    syncData();
                     if(data.rows[0].length > 1) { 
                         data.rows.forEach(r => r.splice(activeCell.c, 1)); 
                         data.widths.splice(activeCell.c, 1);

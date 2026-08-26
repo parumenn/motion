@@ -2046,10 +2046,29 @@ function showBlockMenu(e, handleEl) {
     blockMenuTarget = handleEl.closest('.block-wrapper');
     if (!blockMenuTarget || !blockMenuEl) return;
 
-    const rect = handleEl.getBoundingClientRect();
-    blockMenuEl.style.top = `${rect.bottom + window.scrollY}px`;
-    blockMenuEl.style.left = `${rect.left + window.scrollX}px`;
+   
     blockMenuEl.classList.remove('hidden');
+
+    const rect = handleEl.getBoundingClientRect();
+    const menuRect = blockMenuEl.getBoundingClientRect();
+
+    let top = rect.bottom + window.scrollY;
+    let left = rect.left + window.scrollX;
+
+    if (rect.bottom + menuRect.height > window.innerHeight) {
+        top = rect.top + window.scrollY - menuRect.height;
+    }
+
+    if (left + menuRect.width > window.innerWidth + window.scrollX) {
+        left = window.innerWidth + window.scrollX - menuRect.width - 10;
+    }
+
+    if (top < window.scrollY) {
+        top = window.scrollY + 10;
+    }
+
+    blockMenuEl.style.top = `${top}px`;
+    blockMenuEl.style.left = `${left}px`;
 }
 
 function executeBlockMenu(action) {

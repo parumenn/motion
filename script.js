@@ -1401,7 +1401,7 @@ function renderBlocks(blockArray, container) {
                     renderTable(data); saveEditorState(true); 
                 };
                 
-                const delRow = document.createElement('button'); delRow.textContent = '行を削除';
+                const delRow = document.createElement('button'); delRow.textContent = '→ 行を削除';
                 delRow.onclick = () => { 
                     syncData();
                     if(data.rows.length > 1) { 
@@ -1411,7 +1411,7 @@ function renderBlocks(blockArray, container) {
                     } 
                 };
                 
-                const delCol = document.createElement('button'); delCol.textContent = '列を削除';
+                const delCol = document.createElement('button'); delCol.textContent = '↓ 列を削除';
                 delCol.onclick = () => { 
                     syncData();
                     if(data.rows[0].length > 1) { 

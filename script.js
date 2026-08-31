@@ -1053,7 +1053,16 @@ async function openPage(id) {
     }
 
     const lockedBy = isPageLocked(id);
-    if (lockedBy && !lockedBy.isUnlockedSession) { showPasswordModal(lockedBy.id, () => openPage(id)); return; }
+    if (lockedBy && !lockedBy.isUnlockedSession) {
+        showPasswordModal(lockedBy.id, () => {
+            if (!state.expandedNodes.includes(lockedBy.id)) {
+                state.expandedNodes.push(lockedBy.id);
+                saveData();
+            }
+            openPage(id);
+        }); 
+        return; 
+    }
     
     const page = state.pages[id];
 

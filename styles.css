@@ -1583,3 +1583,73 @@ body.dark-mode .selected-block > .block-main {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
 }
+
+/* ================= 起動ローダー (Appwrite同期用) ================= */
+#appwrite-sync-loader {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: var(--bg-main); /* ダーク/ライトモード対応 */
+    z-index: 99990; /* ログイン画面の下、他UIの上に配置 */
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    transition: opacity 0.6s ease, visibility 0.6s ease;
+    opacity: 1;
+    visibility: visible;
+}
+
+/* 非表示用のクラス */
+#appwrite-sync-loader.hidden {
+    opacity: 0;
+    visibility: hidden;
+}
+
+/* テキストのスタイル */
+#appwrite-sync-loader .txt {
+    font-size: 20px;
+    font-weight: bold;
+    color: var(--text-main); /* ダーク/ライトモード対応 */
+    margin-top: 32px;
+    opacity: 0;
+    transition: opacity 0.4s ease;
+}
+
+/* ひし形スピナーのコンテナ */
+#appwrite-sync-loader .looping-rhombuses-spinner {
+    width: 60px;
+    height: 15px;
+    position: relative;
+    opacity: 0;
+    transition: opacity 0.4s ease;
+}
+
+/* 表示トリガー用のクラス (JSで付与) */
+#appwrite-sync-loader .txt.show,
+#appwrite-sync-loader .looping-rhombuses-spinner.show {
+    opacity: 1;
+}
+
+/* ひし形アニメーション本体 */
+#appwrite-sync-loader .rhombus {
+    width: 15px;
+    height: 15px;
+    background-color: var(--accent); /* テーマカラー(青)を適用 */
+    position: absolute;
+    border-radius: 2px;
+    transform: translateX(0) rotate(45deg) scale(0);
+    animation: looping-rhombuses-anim 2.5s linear infinite;
+}
+
+#appwrite-sync-loader .rhombus:nth-child(1) { animation-delay: -1.5s; }
+#appwrite-sync-loader .rhombus:nth-child(2) { animation-delay: -1.0s; }
+#appwrite-sync-loader .rhombus:nth-child(3) { animation-delay: -0.5s; }
+
+@keyframes looping-rhombuses-anim {
+    0%   { transform: translateX(0) rotate(45deg) scale(0); }
+    50%  { transform: translateX(22px) rotate(45deg) scale(1); }
+    100% { transform: translateX(44px) rotate(45deg) scale(0); }
+}

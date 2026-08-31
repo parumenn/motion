@@ -215,6 +215,7 @@ body {
     flex: 1;
     overflow-y: auto;
     padding: 8px;
+    padding-bottom: 50vh;
 }
 
 .tree-item {

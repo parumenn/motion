@@ -198,16 +198,32 @@ async function initApp() {
     const qualitySelect = document.getElementById('setting-image-quality');
     if (qualitySelect) qualitySelect.value = savedQuality;
 
+    // ★ 追加: ローダーのUI要素を取得
+    const syncLoader = document.getElementById('appwrite-sync-loader');
+    const syncSpinner = syncLoader?.querySelector('.looping-rhombuses-spinner');
+    const syncTxt = syncLoader?.querySelector('.txt');
+
     try {
+        // ★ 追加: ログインチェック開始時にローダーのアニメーションとテキストを表示
+        if (syncLoader) {
+            syncLoader.classList.remove('hidden');
+            setTimeout(() => {
+                if(syncSpinner) syncSpinner.classList.add('show');
+                if(syncTxt) syncTxt.classList.add('show');
+            }, 100);
+        }
+
         currentUser = await account.get();
         
         try {
             const userDoc = await databases.getDocument(DB_ID, 'users', currentUser.$id);
             if (userDoc.status !== 'approved') {
+                if (syncLoader) syncLoader.classList.add('hidden'); // 未承認時はローダーを消す
                 showPendingApprovalModal(currentUser.email);
                 return;
             }
         } catch (err) {
+            if (syncLoader) syncLoader.classList.add('hidden');
             showPendingApprovalModal(currentUser?.email || '');
             return;
         }
@@ -250,7 +266,16 @@ async function initApp() {
             state.recentPages = parsedUi.recentPages || [];
         }
 
+        // ★ Appwriteとのデータ同期を実行（ここでロード時間がかかります）
         await loadDataFromAppwrite();
+
+        // ★ 追加: 同期完了！テキストを切り替えてからローダーをフェードアウト
+        if (syncLoader) {
+            if (syncTxt) syncTxt.textContent = '完了！';
+            setTimeout(() => {
+                syncLoader.classList.add('hidden');
+            }, 500); // 完了の文字を0.5秒見せてから消す
+        }
 
         state.expandedNodes = state.expandedNodes.filter(id => {
             const lockedBy = isPageLocked(id);
@@ -261,6 +286,8 @@ async function initApp() {
         openPage('home');
         calcStorageUsage();
     } catch (err) {
+        // ★ エラー時（未ログイン状態など）はローダーを隠してログイン画面を出す
+        if (syncLoader) syncLoader.classList.add('hidden');
         currentUser = null;
         showAuthModal();
     }

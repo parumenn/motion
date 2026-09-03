@@ -1,0 +1,19 @@
+name: Appwrite Keepalive
+
+on:
+  schedule:
+    # 5日ごとの深夜0時(UTC)に自動実行
+    - cron: '0 0 */5 * *'
+  workflow_dispatch: # 手動でテスト実行できるようにする設定
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Ping Appwrite API
+        run: |
+          curl -X GET "https://cloud.appwrite.io/v1/users" \
+            -H "X-Appwrite-Project: ${{ secrets.APPWRITE_PROJECT_ID }}" \
+            -H "X-Appwrite-Key: ${{ secrets.APPWRITE_API_KEY }}" \
+            -H "Content-Type: application/json"

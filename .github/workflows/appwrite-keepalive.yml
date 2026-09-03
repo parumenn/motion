@@ -13,7 +13,7 @@ jobs:
     steps:
       - name: Ping Appwrite API
         run: |
-          curl -X GET "https://cloud.appwrite.io/v1/users" \
+          curl -X GET "https://nyc.cloud.appwrite.io/v1/users" \
             -H "X-Appwrite-Project: ${{ secrets.APPWRITE_PROJECT_ID }}" \
             -H "X-Appwrite-Key: ${{ secrets.APPWRITE_API_KEY }}" \
             -H "Content-Type: application/json"

@@ -1345,12 +1345,11 @@ function renderBlocks(blockArray, container) {
                         });
                         
                         td.addEventListener('keydown', (e) => {
-                            // ★修正1: イベント伝播を止め、他のブロックへ勝手に飛ぶのを防ぐ
-                            if (['Backspace', 'Delete', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+                            // ★修正: 'Enter' を追加し、イベント伝播を止めて表外にブロックが作られるのを防ぐ
+                            if (['Backspace', 'Delete', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter'].includes(e.key)) {
                                 e.stopPropagation();
                             }
                             
-                            // ★修正2: テキストの端にいる時だけ隣のセルへ移動
                             if (e.key === 'ArrowRight' && isCaretAtEnd(td)) {
                                 e.preventDefault(); const nextTd = td.nextElementSibling;
                                 if(nextTd) { nextTd.focus(); setCaretPosition(nextTd, 0); }
@@ -1364,6 +1363,7 @@ function renderBlocks(blockArray, container) {
                                 const prevTr = tr.previousElementSibling;
                                 if(prevTr && prevTr.children[cIdx]) { e.preventDefault(); prevTr.children[cIdx].focus(); setCaretPosition(prevTr.children[cIdx], prevTr.children[cIdx].textContent.length); }
                             } else if (e.key === 'Enter') {
+                                // Shift+Enter（またはEnter）でセル内改行
                                 e.preventDefault(); document.execCommand('insertLineBreak'); saveEditorState(true);
                             }
                         });
@@ -1371,6 +1371,25 @@ function renderBlocks(blockArray, container) {
                     });
                     table.appendChild(tr);
                 });
+
+                const addRowUp = document.createElement('button'); addRowUp.textContent = '+ 上に行';
+                addRowUp.onclick = () => { 
+                    syncData();
+                    const newRow = new Array(data.rows[0].length).fill('');
+                    data.rows.splice(activeCell.r, 0, newRow);
+                    activeCell.r = Math.min(activeCell.r + 1, data.rows.length - 1); // 挿入分アクティブセルをずらす
+                    renderTable(data); saveEditorState(true); 
+                };
+
+                // ▼新規追加：左に列
+                const addColLeft = document.createElement('button'); addColLeft.textContent = '+ 左に列';
+                addColLeft.onclick = () => { 
+                    syncData();
+                    data.rows.forEach(r => r.splice(activeCell.c, 0, '')); 
+                    data.widths.splice(activeCell.c, 0, '');
+                    activeCell.c = Math.min(activeCell.c + 1, data.rows[0].length - 1); // 挿入分アクティブセルをずらす
+                    renderTable(data); saveEditorState(true); 
+                };
 
                 // マウスドラッグでの列幅リサイズ機能
                 table.addEventListener('mousemove', (e) => {
@@ -1458,7 +1477,7 @@ function renderBlocks(blockArray, container) {
                     } 
                 };
                 
-                controls.append(addRow, addCol, delRow, delCol);
+                controls.append(addRowUp, addRow, addColLeft, addCol, delRow, delCol);
                 content.append(table, controls);
                 
                 // 再描画後に元のセルへフォーカスを戻す

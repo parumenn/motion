@@ -2,15 +2,25 @@ name: Appwrite Keepalive
 
 on:
   schedule:
-    # 5日ごとの深夜0時(UTC)に自動実行
-    - cron: '0 0 */5 * *'
-  workflow_dispatch: # 手動でテスト実行できるようにする設定
+    # 毎日 深夜0時(UTC) / 日本時間午前9時に実行
+    - cron: '0 0 * * *'
+  workflow_dispatch:
 
 jobs:
   keepalive:
     runs-on: ubuntu-latest
+    permissions:
+      actions: write # 60日停止回避のために、自身の状態を更新する権限
 
     steps:
+      # 1. GitHub Actionsの60日停止を回避する（自身を再度「有効化」してタイマーリセット）
+      - name: Prevent GitHub Actions Suspension
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: gh workflow enable appwrite-keepalive.yml
+
+      # 2. Appwriteへの生存報告（フェイルファスト付き）
       - name: Ping Appwrite API
         run: |
           curl -f -X GET "https://nyc.cloud.appwrite.io/v1/users" \

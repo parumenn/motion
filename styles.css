@@ -959,7 +959,7 @@ body.dark-mode .search-modal {
     border: 1px solid rgba(0, 0, 0, 0.08);
     border-radius: 8px;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-    z-index: 3000;
+    z-index: 11000;
     padding: 6px;
 }
 
@@ -1578,6 +1578,10 @@ body.dark-mode .selected-block > .block-main {
 
     .sheet-item-title { font-weight: 600; font-size: 15px; }
     .sheet-item-desc { font-size: 12px; color: var(--text-muted); }
+
+    .sidebar-footer {
+        padding-bottom: 70px !important; 
+    }
 }
 
 @keyframes spin {

@@ -871,7 +871,13 @@ function renderTree() {
             toggle.innerHTML = children.length > 0 ? (isExpanded ? '▼' : '▶') : '•';
             
             const title = document.createElement('div'); title.className = 'tree-title';
-            title.textContent = page.title || '無題';
+            let titleText = page.title || '無題';
+            if (page.isLocked) {
+                const icon = page.isUnlockedSession ? '🔓' : '🔒';
+                titleText = `${icon} ${titleText}`;
+            }
+            title.textContent = titleText;
+            
             item.append(toggle, title);
             
             item.onclick = (e) => {

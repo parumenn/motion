@@ -2986,16 +2986,14 @@ function executeMobileCommand(cmdId) {
     
 }
 
-// ================= 全部入りZIPエクスポート処理 =================
+// ================= 全部入りZIPエクスポート処理（確実版） =================
 document.getElementById('btn-export')?.addEventListener('click', async () => {
-    // ※元の btn-export の処理（JSON単体ダウンロード）を上書きする前提です
     await exportAllDataAndImages();
 });
 
 async function exportAllDataAndImages() {
     alert("ZIPエクスポートの準備を開始します。画像が多い場合、少し時間がかかります...");
     
-    // JSZipのインスタンスを作成
     const zip = new JSZip();
     
     // 1. 現在の全ページデータ（state）をディープコピーして取得
@@ -3005,24 +3003,35 @@ async function exportAllDataAndImages() {
         delete p.$id; // Appwriteの内部IDは不要なため削除
     });
     
-    // 2. データ内からAppwriteの画像URLを抽出
-    const imageUrls = extractImageUrls(exportData); 
+    // 2. データ構造を直接辿って、確実な画像URLリストを抽出する
+    const imageUrls = new Set();
+    Object.values(exportData.pages).forEach(page => {
+        const findImages = (blocks) => {
+            if (!blocks || !Array.isArray(blocks)) return;
+            blocks.forEach(b => {
+                if (b.type === 'image' && b.content) {
+                    imageUrls.add(b.content); // 画像URLを確保
+                }
+                if (b.children) findImages(b.children);
+            });
+        };
+        findImages(page.blocks);
+    });
     
-    // 画像を入れるフォルダをZIP内に作成
+    const imageUrlArray = Array.from(imageUrls);
     const imgFolder = zip.folder("images");
     
     // 3. 画像を一つずつFetchしてZIPに詰める
-    for (const url of imageUrls) {
+    for (const url of imageUrlArray) {
         try {
-            // AppwriteのStorageから画像をダウンロード
             const response = await fetch(url);
             if (!response.ok) throw new Error("Fetch failed");
             
             const blob = await response.blob();
             
-            // URLからファイル名を抽出（AppwriteのファイルID）
-            const urlObj = new URL(url);
-            const fileId = urlObj.pathname.split('/')[4] || "image_" + Date.now();
+            // URLからファイルIDを抽出（ /files/○○○/ の部分を狙う）
+            const match = url.match(/\/files\/([a-zA-Z0-9_-]+)/);
+            const fileId = match ? match[1] : "image_" + Date.now();
             const fileName = `${fileId}.png`;
             
             // 取得したBlobをZIPのimagesフォルダに追加
@@ -3033,16 +3042,25 @@ async function exportAllDataAndImages() {
         }
     }
     
-    // 4. JSON内のAppwriteの画像URLを、ローカルパス（images/xxx.png）に一括置換する
-    let dataStr = JSON.stringify(exportData, null, 2);
-    // AppwriteのStorage URLっぽいものを探し、`images/[FILE_ID].png` に書き換える正規表現
-    const regex = /https:\/\/nyc\.cloud\.appwrite\.io\/v1\/storage\/buckets\/motion_storage\/files\/([a-zA-Z0-9]+)\/view\?project=6a75a37300149977659a/g;
-    dataStr = dataStr.replace(regex, "images/$1.png");
+    // 4. エクスポート用データの画像URLを「images/xxx.png」に書き換える
+    Object.values(exportData.pages).forEach(page => {
+        const replaceImages = (blocks) => {
+            if (!blocks || !Array.isArray(blocks)) return;
+            blocks.forEach(b => {
+                if (b.type === 'image' && b.content) {
+                    const match = b.content.match(/\/files\/([a-zA-Z0-9_-]+)/);
+                    const fileId = match ? match[1] : "image_" + Date.now();
+                    b.content = `images/${fileId}.png`; // ローカルパスに書き換え
+                }
+                if (b.children) replaceImages(b.children);
+            });
+        };
+        replaceImages(page.blocks);
+    });
     
-    // 置換済みのJSONをZIPのルートに追加
-    zip.file("motion_backup.json", dataStr);
+    // 5. 置換済みのJSONをZIPに追加してダウンロード
+    zip.file("motion_backup.json", JSON.stringify(exportData, null, 2));
     
-    // 5. ZIPファイルを生成してダウンロード
     try {
         const zipBlob = await zip.generateAsync({ type: "blob" });
         const downloadLink = document.createElement("a");
@@ -3054,18 +3072,5 @@ async function exportAllDataAndImages() {
     } catch (e) {
         alert("ZIP生成エラー: " + e.message);
     }
-}
-
-// JSONからURLを抽出するヘルパー関数
-function extractImageUrls(data) {
-    const urls = new Set();
-    const dataStr = JSON.stringify(data);
-    // プロジェクトで設定されているAppwriteのエンドポイントに合わせて抽出
-    const regex = /https:\/\/nyc\.cloud\.appwrite\.io\/v1\/storage\/buckets\/motion_storage\/files\/([a-zA-Z0-9]+)\/view\?project=6a75a37300149977659a/g;
-    let match;
-    while ((match = regex.exec(dataStr)) !== null) {
-        urls.add(match[0]); // match[0] が完全なURL
-    }
-    return Array.from(urls);
 }
 // =========================================================

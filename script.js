@@ -2391,18 +2391,7 @@ document.querySelectorAll('.settings-tab').forEach(tab => {
     };
 });
 
-document.getElementById('btn-export')?.addEventListener('click', () => {
-    const exportData = clone(state);
-    Object.values(exportData.pages).forEach(p => {
-        delete p.isUnlockedSession;
-        delete p.$id;
-    });
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportData));
-    const dlAnchor = document.createElement('a'); 
-    dlAnchor.setAttribute("href", dataStr); 
-    dlAnchor.setAttribute("download", "motion_workspace.json"); 
-    dlAnchor.click();
-});
+
 document.getElementById('btn-import')?.addEventListener('click', () => document.getElementById('file-import')?.click());
 document.getElementById('file-import')?.addEventListener('change', async (e) => {
     const file = e.target.files[0]; if (!file) return;
@@ -2986,31 +2975,51 @@ function executeMobileCommand(cmdId) {
     
 }
 
-// ================= 全部入りZIPエクスポート処理（確実版） =================
+// ================= 全部入りZIPエクスポート処理（全データ取得対応版） =================
 document.getElementById('btn-export')?.addEventListener('click', async () => {
     await exportAllDataAndImages();
 });
 
 async function exportAllDataAndImages() {
-    alert("ZIPエクスポートの準備を開始します。画像が多い場合、少し時間がかかります...");
+    alert("ZIPエクスポートの準備を開始します。全ページのデータを取得するため、少し時間がかかります...");
     
     const zip = new JSZip();
     
     // 1. 現在の全ページデータ（state）をディープコピーして取得
     let exportData = JSON.parse(JSON.stringify(state));
-    Object.values(exportData.pages).forEach(p => {
-        delete p.isUnlockedSession;
-        delete p.$id; // Appwriteの内部IDは不要なため削除
-    });
     
-    // 2. データ構造を直接辿って、確実な画像URLリストを抽出する
+    // 2. ★超重要：未読み込み（blocks === null）のページデータをAppwriteから全て取得する
+    const pageValues = Object.values(exportData.pages);
+    for (const page of pageValues) {
+        if (page.blocks === null && page.$id) {
+            try {
+                const doc = await databases.getDocument(DB_ID, COLLECTION_PAGES, page.$id, [
+                    Query.select(["blocks"])
+                ]);
+                let parsedBlocks = doc.blocks;
+                if (typeof parsedBlocks === 'string') {
+                    try { parsedBlocks = JSON.parse(parsedBlocks); } catch (err) { parsedBlocks = []; }
+                }
+                page.blocks = Array.isArray(parsedBlocks) ? parsedBlocks : [];
+            } catch (err) {
+                console.warn(`ページ(${page.id})の取得に失敗しました`, err);
+                page.blocks = [];
+            }
+        }
+        
+        // エクスポート用JSONには不要なプロパティを消しておく
+        delete page.isUnlockedSession;
+        delete page.$id; 
+    }
+    
+    // 3. データ構造を直接辿って、確実な画像URLリストを抽出する
     const imageUrls = new Set();
     Object.values(exportData.pages).forEach(page => {
         const findImages = (blocks) => {
             if (!blocks || !Array.isArray(blocks)) return;
             blocks.forEach(b => {
                 if (b.type === 'image' && b.content) {
-                    imageUrls.add(b.content); // 画像URLを確保
+                    imageUrls.add(b.content); 
                 }
                 if (b.children) findImages(b.children);
             });
@@ -3021,7 +3030,7 @@ async function exportAllDataAndImages() {
     const imageUrlArray = Array.from(imageUrls);
     const imgFolder = zip.folder("images");
     
-    // 3. 画像を一つずつFetchしてZIPに詰める
+    // 4. 画像を一つずつFetchしてZIPに詰める
     for (const url of imageUrlArray) {
         try {
             const response = await fetch(url);
@@ -3034,7 +3043,6 @@ async function exportAllDataAndImages() {
             const fileId = match ? match[1] : "image_" + Date.now();
             const fileName = `${fileId}.png`;
             
-            // 取得したBlobをZIPのimagesフォルダに追加
             imgFolder.file(fileName, blob);
             
         } catch (error) {
@@ -3042,7 +3050,7 @@ async function exportAllDataAndImages() {
         }
     }
     
-    // 4. エクスポート用データの画像URLを「images/xxx.png」に書き換える
+    // 5. エクスポート用データの画像URLを「images/xxx.png」に書き換える
     Object.values(exportData.pages).forEach(page => {
         const replaceImages = (blocks) => {
             if (!blocks || !Array.isArray(blocks)) return;
@@ -3058,7 +3066,7 @@ async function exportAllDataAndImages() {
         replaceImages(page.blocks);
     });
     
-    // 5. 置換済みのJSONをZIPに追加してダウンロード
+    // 6. 置換済みのJSONをZIPに追加してダウンロード
     zip.file("motion_backup.json", JSON.stringify(exportData, null, 2));
     
     try {

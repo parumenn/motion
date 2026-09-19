@@ -2975,98 +2975,97 @@ function executeMobileCommand(cmdId) {
     
 }
 
-// ================= 全部入りZIPエクスポート処理（全データ取得対応版） =================
+// ================= 全部入りZIPエクスポート処理（完全ディープスキャン対応版） =================
 document.getElementById('btn-export')?.addEventListener('click', async () => {
     await exportAllDataAndImages();
 });
 
 async function exportAllDataAndImages() {
-    alert("ZIPエクスポートの準備を開始します。全ページのデータを取得するため、少し時間がかかります...");
+    alert("ZIPエクスポートの準備を開始します。全データをスキャンするため、少し時間がかかります...");
     
     const zip = new JSZip();
     
-    // 1. 現在の全ページデータ（state）をディープコピーして取得
+    // 1. 現在の全ページデータを取得
     let exportData = JSON.parse(JSON.stringify(state));
     
-    // 2. ★超重要：未読み込み（blocks === null）のページデータをAppwriteから全て取得する
-    const pageValues = Object.values(exportData.pages);
-    for (const page of pageValues) {
-        if (page.blocks === null && page.$id) {
+    // 2. 未読み込みページのブロックデータをAppwriteから完全取得＆パース
+    const pageKeys = Object.keys(exportData.pages);
+    for (const key of pageKeys) {
+        const page = exportData.pages[key];
+        
+        // まだブロックが読み込まれていない（null または 空）場合
+        if ((!page.blocks || page.blocks === null) && page.$id) {
             try {
-                const doc = await databases.getDocument(DB_ID, COLLECTION_PAGES, page.$id, [
-                    Query.select(["blocks"])
-                ]);
-                let parsedBlocks = doc.blocks;
-                if (typeof parsedBlocks === 'string') {
-                    try { parsedBlocks = JSON.parse(parsedBlocks); } catch (err) { parsedBlocks = []; }
-                }
-                page.blocks = Array.isArray(parsedBlocks) ? parsedBlocks : [];
+                // DB_IDとCOLLECTION_PAGESは環境に合わせて固定指定
+                const doc = await databases.getDocument('motion_db', 'pages', page.$id);
+                page.blocks = doc.blocks;
             } catch (err) {
-                console.warn(`ページ(${page.id})の取得に失敗しました`, err);
+                console.warn(`ページ(${page.id})の取得に失敗:`, err);
                 page.blocks = [];
             }
         }
         
-        // エクスポート用JSONには不要なプロパティを消しておく
+        // blocksが二重・三重に文字列化されている場合を考慮し、完全に配列/オブジェクトに戻す
+        let parsed = page.blocks;
+        let parseAttempts = 0;
+        while (typeof parsed === 'string' && parseAttempts < 5) {
+            try {
+                parsed = JSON.parse(parsed);
+            } catch (e) { break; }
+            parseAttempts++;
+        }
+        page.blocks = Array.isArray(parsed) ? parsed : (parsed ? [parsed] : []);
+        
+        // 不要な管理プロパティを削除
         delete page.isUnlockedSession;
         delete page.$id; 
     }
     
-    // 3. データ構造を直接辿って、確実な画像URLリストを抽出する
+    // 3. データ内から「Appwriteの画像URL」を強制的に全検索（構造に依存しない）
     const imageUrls = new Set();
-    Object.values(exportData.pages).forEach(page => {
-        const findImages = (blocks) => {
-            if (!blocks || !Array.isArray(blocks)) return;
-            blocks.forEach(b => {
-                if (b.type === 'image' && b.content) {
-                    imageUrls.add(b.content); 
+    // 汎用的なAppwrite Storage URLを検知する正規表現
+    const urlRegex = /https:\/\/[^\/]+\/v1\/storage\/buckets\/[^\/]+\/files\/([a-zA-Z0-9_-]+)\/(?:view|download)\?[^\s"']+/g;
+    
+    const traverseAndReplace = (obj) => {
+        if (!obj) return;
+        for (const k in obj) {
+            if (typeof obj[k] === 'string') {
+                const matches = obj[k].match(urlRegex);
+                if (matches) {
+                    matches.forEach(url => imageUrls.add(url));
+                    // JSON上のURL（テーブル内のHTMLタグ等も含む）をローカルパスに書き換える
+                    obj[k] = obj[k].replace(urlRegex, 'images/$1.png');
                 }
-                if (b.children) findImages(b.children);
-            });
-        };
-        findImages(page.blocks);
-    });
+            } else if (typeof obj[k] === 'object') {
+                traverseAndReplace(obj[k]);
+            }
+        }
+    };
+    
+    // データ全体をディープスキャンしてURL抽出＆置換
+    traverseAndReplace(exportData);
     
     const imageUrlArray = Array.from(imageUrls);
     const imgFolder = zip.folder("images");
     
-    // 4. 画像を一つずつFetchしてZIPに詰める
+    console.log(`抽出された画像URLの数: ${imageUrlArray.length}`);
+    
+    // 4. 画像のダウンロードとZIP追加
     for (const url of imageUrlArray) {
         try {
             const response = await fetch(url);
-            if (!response.ok) throw new Error("Fetch failed");
-            
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
             const blob = await response.blob();
             
-            // URLからファイルIDを抽出（ /files/○○○/ の部分を狙う）
             const match = url.match(/\/files\/([a-zA-Z0-9_-]+)/);
             const fileId = match ? match[1] : "image_" + Date.now();
-            const fileName = `${fileId}.png`;
-            
-            imgFolder.file(fileName, blob);
-            
+            imgFolder.file(`${fileId}.png`, blob);
         } catch (error) {
             console.error("画像の取得に失敗しました:", url, error);
         }
     }
     
-    // 5. エクスポート用データの画像URLを「images/xxx.png」に書き換える
-    Object.values(exportData.pages).forEach(page => {
-        const replaceImages = (blocks) => {
-            if (!blocks || !Array.isArray(blocks)) return;
-            blocks.forEach(b => {
-                if (b.type === 'image' && b.content) {
-                    const match = b.content.match(/\/files\/([a-zA-Z0-9_-]+)/);
-                    const fileId = match ? match[1] : "image_" + Date.now();
-                    b.content = `images/${fileId}.png`; // ローカルパスに書き換え
-                }
-                if (b.children) replaceImages(b.children);
-            });
-        };
-        replaceImages(page.blocks);
-    });
-    
-    // 6. 置換済みのJSONをZIPに追加してダウンロード
+    // 5. ZIP化してダウンロード
     zip.file("motion_backup.json", JSON.stringify(exportData, null, 2));
     
     try {

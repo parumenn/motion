@@ -2975,109 +2975,132 @@ function executeMobileCommand(cmdId) {
     
 }
 
-// ================= 全部入りZIPエクスポート処理（完全ディープスキャン対応版） =================
-document.getElementById('btn-export')?.addEventListener('click', async () => {
-    await exportAllDataAndImages();
+// ================= 全部入りZIPエクスポート処理（究極の堅牢版） =================
+document.getElementById('btn-export')?.addEventListener('click', async (e) => {
+    const btn = e.target;
+    const originalText = btn.textContent;
+    btn.textContent = "エクスポート実行中...";
+    btn.disabled = true;
+
+    try {
+        await exportAllDataAndImages();
+    } catch (err) {
+        alert("エラーが発生しました: " + err.message);
+        console.error("Export Error:", err);
+    } finally {
+        btn.textContent = originalText;
+        btn.disabled = false;
+    }
 });
 
 async function exportAllDataAndImages() {
-    alert("ZIPエクスポートの準備を開始します。全データをスキャンするため、少し時間がかかります...");
+    alert("クラウドから全データを取得・統合してZIP化します。\nデータ量によって数十秒かかる場合があります。このままお待ちください...");
     
     const zip = new JSZip();
     
-    // 1. 現在の全ページデータを取得
+    // 1. ローカルの最新状態（編集中のデータ）をベースにする
     let exportData = JSON.parse(JSON.stringify(state));
     
-    // 2. 未読み込みページのブロックデータをAppwriteから完全取得＆パース
-    const pageKeys = Object.keys(exportData.pages);
-    for (const key of pageKeys) {
-        const page = exportData.pages[key];
+    // 2. クラウド（Appwrite）から全ページデータを確実に取得する（ページネーション対応）
+    let allPages = [];
+    let lastId = null;
+    let hasMore = true;
+
+    while (hasMore) {
+        // Appwrite v13 のクエリ構文
+        const queries = [Query.limit(100)];
+        if (lastId) queries.push(Query.cursorAfter(lastId));
+
+        const response = await databases.listDocuments(DB_ID, COLLECTION_PAGES, queries);
+        allPages.push(...response.documents);
+
+        if (response.documents.length < 100) {
+            hasMore = false;
+        } else {
+            lastId = response.documents[response.documents.length - 1].$id;
+        }
+    }
+
+    // 3. ローカルデータに「未読み込みのページ」や「欠けているデータ」があればクラウドデータで補完
+    allPages.forEach(doc => {
+        let page = exportData.pages[doc.pageId];
         
-        // まだブロックが読み込まれていない（null または 空）場合
-        if ((!page.blocks || page.blocks === null) && page.$id) {
-            try {
-                // DB_IDとCOLLECTION_PAGESは環境に合わせて固定指定
-                const doc = await databases.getDocument('motion_db', 'pages', page.$id);
-                page.blocks = doc.blocks;
-            } catch (err) {
-                console.warn(`ページ(${page.id})の取得に失敗:`, err);
-                page.blocks = [];
+        // もしローカルのstateに存在しないページがあれば追加
+        if (!page) {
+            exportData.pages[doc.pageId] = {
+                id: doc.pageId,
+                title: doc.title || '',
+                parentId: doc.parentId || null,
+                blocks: null,
+                isLocked: doc.isLocked || false,
+                password: doc.password || null
+            };
+            page = exportData.pages[doc.pageId];
+        }
+
+        // ブロックがまだ読み込まれていない（null または 空）場合のみクラウドデータで上書き
+        // ※こうすることで、今エディタで編集したばかりの最新状態を維持できる
+        if (!page.blocks || page.blocks === null || page.blocks.length === 0) {
+            let parsedBlocks = doc.blocks;
+            let parseAttempts = 0;
+            // 稀に文字列化が二重になっていることがあるため、配列になるまで展開
+            while (typeof parsedBlocks === 'string' && parseAttempts < 5) {
+                try { parsedBlocks = JSON.parse(parsedBlocks); } catch (e) { break; }
+                parseAttempts++;
             }
+            page.blocks = Array.isArray(parsedBlocks) ? parsedBlocks : (parsedBlocks ? [parsedBlocks] : []);
         }
-        
-        // blocksが二重・三重に文字列化されている場合を考慮し、完全に配列/オブジェクトに戻す
-        let parsed = page.blocks;
-        let parseAttempts = 0;
-        while (typeof parsed === 'string' && parseAttempts < 5) {
-            try {
-                parsed = JSON.parse(parsed);
-            } catch (e) { break; }
-            parseAttempts++;
-        }
-        page.blocks = Array.isArray(parsed) ? parsed : (parsed ? [parsed] : []);
-        
-        // 不要な管理プロパティを削除
+
+        // JSONに含めたくないAppwrite用のプロパティを消去
         delete page.isUnlockedSession;
         delete page.$id; 
-    }
-    
-    // 3. データ内から「Appwriteの画像URL」を強制的に全検索（構造に依存しない）
-    const imageUrls = new Set();
-    // 汎用的なAppwrite Storage URLを検知する正規表現
-    const urlRegex = /https:\/\/[^\/]+\/v1\/storage\/buckets\/[^\/]+\/files\/([a-zA-Z0-9_-]+)\/(?:view|download)\?[^\s"']+/g;
-    
-    const traverseAndReplace = (obj) => {
-        if (!obj) return;
-        for (const k in obj) {
-            if (typeof obj[k] === 'string') {
-                const matches = obj[k].match(urlRegex);
-                if (matches) {
-                    matches.forEach(url => imageUrls.add(url));
-                    // JSON上のURL（テーブル内のHTMLタグ等も含む）をローカルパスに書き換える
-                    obj[k] = obj[k].replace(urlRegex, 'images/$1.png');
-                }
-            } else if (typeof obj[k] === 'object') {
-                traverseAndReplace(obj[k]);
-            }
-        }
-    };
-    
-    // データ全体をディープスキャンしてURL抽出＆置換
-    traverseAndReplace(exportData);
-    
-    const imageUrlArray = Array.from(imageUrls);
+    });
+
+    // 4. 完成した全データを一度「ただの文字列」にする
+    let jsonString = JSON.stringify(exportData, null, 2);
+
+    // 5. 文字列全体からAppwriteの「ファイルID」を無条件で全て抽出する
+    // パターン: /files/〇〇〇/view または /files/〇〇〇/download
+    const fileIdRegex = /\/files\/([a-zA-Z0-9_-]+)\/(?:view|download)/g;
+    const matches = [...jsonString.matchAll(fileIdRegex)];
+    const fileIds = [...new Set(matches.map(m => m[1]))]; // 重複を排除
+
+    console.log(`抽出された画像ファイルID: ${fileIds.length}件`, fileIds);
+
+    // 6. 画像ファイルを一つずつダウンロードしてZIPに追加
     const imgFolder = zip.folder("images");
-    
-    console.log(`抽出された画像URLの数: ${imageUrlArray.length}`);
-    
-    // 4. 画像のダウンロードとZIP追加
-    for (const url of imageUrlArray) {
+    for (const fileId of fileIds) {
         try {
-            const response = await fetch(url);
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            const blob = await response.blob();
+            // SDKを使って安全なダウンロードURLを生成
+            const urlObj = storage.getFileView(BUCKET_ID, fileId);
+            const urlStr = urlObj.toString();
             
-            const match = url.match(/\/files\/([a-zA-Z0-9_-]+)/);
-            const fileId = match ? match[1] : "image_" + Date.now();
+            const response = await fetch(urlStr);
+            if (!response.ok) throw new Error(`HTTPエラー: ${response.status}`);
+            
+            const blob = await response.blob();
             imgFolder.file(`${fileId}.png`, blob);
+            
         } catch (error) {
-            console.error("画像の取得に失敗しました:", url, error);
+            console.warn(`画像（ID: ${fileId}）の取得に失敗しました。スキップします。`, error);
         }
     }
+
+    // 7. JSON文字列の中にある「Appwriteの画像URL」を全て「images/〇〇.png」に一括置換
+    // クォーテーションで囲まれているURLの塊を正確に捉えてローカルパスに置き換える
+    const replaceRegex = /https:\/\/[^"'\\]+\/files\/([a-zA-Z0-9_-]+)\/(?:view|download)[^"'\\]*/g;
+    jsonString = jsonString.replace(replaceRegex, 'images/$1.png');
+
+    // 8. 置換済みのJSONファイルをZIPのルートに登録
+    zip.file("motion_backup.json", jsonString);
+
+    // 9. ZIPファイルを生成してダウンロード
+    const zipBlob = await zip.generateAsync({ type: "blob" });
+    const downloadLink = document.createElement("a");
+    downloadLink.href = URL.createObjectURL(zipBlob);
+    downloadLink.download = `motion_backup_${new Date().toISOString().slice(0,10)}.zip`;
+    downloadLink.click();
     
-    // 5. ZIP化してダウンロード
-    zip.file("motion_backup.json", JSON.stringify(exportData, null, 2));
-    
-    try {
-        const zipBlob = await zip.generateAsync({ type: "blob" });
-        const downloadLink = document.createElement("a");
-        downloadLink.href = URL.createObjectURL(zipBlob);
-        downloadLink.download = `motion_backup_${new Date().toISOString().slice(0,10)}.zip`;
-        downloadLink.click();
-        
-        alert("エクスポートが完了しました！");
-    } catch (e) {
-        alert("ZIP生成エラー: " + e.message);
-    }
+    alert(`エクスポートが完了しました！\n画像 ${fileIds.length} 枚をZIPに格納しました。`);
 }
 // =========================================================
